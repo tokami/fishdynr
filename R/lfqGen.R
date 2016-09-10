@@ -56,7 +56,7 @@
 #' 
 lfqGen <- function(
 tincr = 1/12,
-K.mu = 0.5, K.cv = 0.1,
+K.mu = NaN, K.cv = 0.1,
 Linf.mu = 80, Linf.cv = 0.1,
 phiprime.mu = 3.5,
 ts = 0, C = 0.85,
@@ -73,6 +73,9 @@ fished_t = seq(0,5,tincr),
 lfqFrac = 1,
 progressBar = TRUE
 ){
+
+# estimate phiprime if K.mu is given
+if(!is.nan(K.mu)) phiprime.mu <- log10(K.mu) + 2 * log10(Linf.mu)
 
 # times
 timeseq = seq(from=timemin, to=timemax, by=tincr)
