@@ -25,6 +25,7 @@
 #' @param N0 starting number of individuals
 #' @param fished_t times when stock is fished
 #' @param lfqFrac fraction of fished stock that are sampled for length frequency data (default = 1).
+#' @param recInds Logical. Should individuals be recorded? 
 #' @param progressBar Logical. Should progress bar be shown in console (Default=TRUE)
 #' 
 #' @description See \code{\link[fishdynr]{dt_growth_soVB}} for information on growth function.
@@ -82,6 +83,7 @@ timemin = 0, timemax = 20, timemin.date = as.Date("1980-01-01"),
 N0 = 10000,
 fished_t = seq(17,19,tincr),
 lfqFrac = 1,
+recInds = FALSE,
 progressBar = TRUE
 ){
 
@@ -271,6 +273,16 @@ for(j in seq(timeseq)){
   }
 	
   repro <- repro_t[j]
+	
+	
+  #record inds
+    if(recInds){
+      if(j == 1){
+        rec <- record.inds(inds, ids=rec.ids)
+      } else {
+        rec <- record.inds(inds, rec=rec)
+      }
+    }
 	
 	# population processes
 	inds <- grow.inds(inds)
