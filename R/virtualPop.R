@@ -1,6 +1,6 @@
 #' @title Virtual fish population
 #'
-#' @param K.mu mean K (growth parameter from von Bertalanffy growth function) 
+#' @param K.mu mean K (growth parameter from von Bertalanffy growth function)
 #' @param K.cv coefficient of variation on K
 #' @param Linf.mu mean Linf (infinite length parameter from von Bertalanffy growth function)
 #' @param Linf.cv coefficient of variation on Linf
@@ -10,11 +10,13 @@
 #' @param LWb length-weight relationship constant 'b' (W = a*L^b). Model assumed length in cm and weight in kg.
 #' @param Lmat length at maturity (where 50\% of individuals are mature)
 #' @param wmat width between 25\% and 75\% quantiles for Lmat
-#' @param rmax parameter for Beverton-Holt stock recruitment relationship (see \code{\link[fishdynr]{srrBH}})
-#' @param beta parameter for Beverton-Holt stock recruitment relationship (see \code{\link[fishdynr]{srrBH}})
-#' @param repro_wt weight of reproduction (vector of monthly reproduction weight) 
+#' @param rmaxBH parameter for Beverton-Holt stock recruitment relationship (see \code{\link[fishdynr]{srrBH}})
+#' @param betaBH parameter for Beverton-Holt stock recruitment relationship (see \code{\link[fishdynr]{srrBH}})
+#' @param repro_wt weight of reproduction (vector of monthly reproduction weight)
 #' @param M natural mortality
-#' @param harvest_rate Fishing mortality (i.e. 'F')
+#' @param E effort (E = F / q)
+#' @param q catchability (default 0.005)
+#' @param harvest_rate Fishing mortality (i.e. 'F' = C/B)
 #' @param L50 minimum length of capture (in cm). Where selectivity equals 0.5. Assumes logistic ogive typical of trawl net selectivity.
 #' @param wqs width of selectivity ogive (in cm)
 #' @param bin.size resulting bin size for length frequencies (in cm)
@@ -26,29 +28,29 @@
 #' @param fished_t times when stock is fished
 #' @param lfqFrac fraction of fished stock that are sampled for length frequency data (default = 0.1).
 #' @param progressBar Logical. Should progress bar be shown in console (Default=TRUE)
-#' 
+#'
 #' @description See \code{\link[fishdynr]{dt_growth_soVB}} for information on growth function.
 #' The model creates variation in growth based on a mean phi prime value for the population,
-#' which describes relationship between individual Linf and K values. See Vakily (1992) 
-#' for more details. 
-#' 
+#' which describes relationship between individual Linf and K values. See Vakily (1992)
+#' for more details.
+#'
 #' @return a list containing growth parameters and length frequency object
-#' 
-#' @references 
-#' Vakily, J.M., 1992. Determination and comparison of bivalve growth, 
+#'
+#' @references
+#' Vakily, J.M., 1992. Determination and comparison of bivalve growth,
 #' with emphasis on Thailand and other tropical areas. WorldFish.
-#' 
-#' Munro, J.L., Pauly, D., 1983. A simple method for comparing the growth 
+#'
+#' Munro, J.L., Pauly, D., 1983. A simple method for comparing the growth
 #' of fishes and invertebrates. Fishbyte 1, 5-6.
-#' 
-#' Pauly, D., Munro, J., 1984. Once more on the comparison of growth 
+#'
+#' Pauly, D., Munro, J., 1984. Once more on the comparison of growth
 #' in fish and invertebrates. Fishbyte (Philippines).
-#' 
+#'
 #' @importFrom graphics hist
 #' @importFrom stats rlnorm runif
 #' @importFrom utils txtProgressBar setTxtProgressBar
 #' @importFrom stats qnorm rnorm
-#' 
+#'
 #' @export
 #'
 #' @examples
@@ -56,22 +58,22 @@
 #' set.seed(1)
 #' res <- virtualPop()
 #' names(res)
-#' 
+#'
 #' op <- par(mfcol=c(2,1), mar=c(4,4,1,1))
 #' plot(N ~ dates, data=res$pop, t="l")
 #' plot(B ~ dates, data=res$pop, t="l", ylab="B, SSB")
 #' lines(SSB ~ dates, data=res$pop, t="l", lty=2)
 #' par(op)
-#' 
+#'
 #' pal <- colorRampPalette(c("grey30",5,7,2), bias=2)
 #' with(res$lfqbin, image(x=dates, y=midLengths, z=t(catch), col=pal(100)))
-#' 
+#'
 #' ### biased results with single monthly sample
 #' inds <- res$inds[[1]]
 #' plot(mat ~ L, data = inds, pch=".", cex=5, col=rgb(0,0,0,0.05))
 #' fit <- glm(mat ~ L, data = inds, family = binomial(link = "logit"))
 #' summary(fit)
-#' 
+#'
 #' newdat <- data.frame(L = seq(min(inds$L), max(inds$L), length.out=100))
 #' newdat$pmat <- pmat_w(newdat$L, Lmat = 40, wmat=40*0.2)
 #' pred <- predict(fit, newdata=newdat, se.fit=TRUE)
@@ -82,7 +84,7 @@
 #' newdat$ymin <- fit$family$linkinv(newdat$fit - std * newdat$se.fit)
 #' newdat$ymax <- fit$family$linkinv(newdat$fit + std * newdat$se.fit)
 #' newdat$fit <- fit$family$linkinv(newdat$fit)  # Rescale to 0-1
-#' 
+#'
 #' plot(mat ~ L, data = inds, pch=".", cex=5, col=rgb(0,0,0,0.05))
 #' lines(pmat ~ L, newdat, col=8, lty=3)
 #' polygon(
@@ -92,20 +94,20 @@
 #'   border = adjustcolor(2, alpha.f = 0.3)
 #' )
 #' lines(fit ~ L, newdat, col=2)
-#' 
+#'
 #' lrPerc <- function(alpha, beta, p) (log(p/(1-p))-alpha)/beta
 #' ( L50 <- lrPerc(alpha=coef(fit)[1], beta=coef(fit)[2], p=0.5) )
 #' lines(x=c(L50,L50,0), y=c(-100,0.5,0.5), lty=2, col=2)
 #' text(x=L50, y=0.5, labels = paste0("L50 = ", round(L50,2)), pos=4, col=2 )
-#' 
-#' 
-#' 
+#'
+#'
+#'
 #' ### all samples combined
 #' inds <- do.call("rbind", res$inds)
 #' plot(mat ~ L, data = inds, pch=".", cex=5, col=rgb(0,0,0,0.05))
 #' fit <- glm(mat ~ L, data = inds, family = binomial(link = "logit"))
 #' summary(fit)
-#' 
+#'
 #' newdat <- data.frame(L = seq(min(inds$L), max(inds$L), length.out=100))
 #' newdat$pmat <- pmat_w(newdat$L, Lmat = 40, wmat=40*0.2)
 #' pred <- predict(fit, newdata=newdat, se.fit=TRUE)
@@ -116,7 +118,7 @@
 #' newdat$ymin <- fit$family$linkinv(newdat$fit - std * newdat$se.fit)
 #' newdat$ymax <- fit$family$linkinv(newdat$fit + std * newdat$se.fit)
 #' newdat$fit <- fit$family$linkinv(newdat$fit)  # Rescale to 0-1
-#' 
+#'
 #' plot(mat ~ L, data = inds, pch=".", cex=5, col=rgb(0,0,0,0.05))
 #' lines(pmat ~ L, newdat, col=8, lty=3)
 #' polygon(
@@ -126,16 +128,19 @@
 #'   border = adjustcolor(2, alpha.f = 0.3)
 #' )
 #' lines(fit ~ L, newdat, col=2)
-#' 
+#'
 #' lrPerc <- function(alpha, beta, p) (log(p/(1-p))-alpha)/beta
 #' ( L50 <- lrPerc(alpha=coef(fit)[1], beta=coef(fit)[2], p=0.5) )
 #' lines(x=c(L50,L50,0), y=c(-100,0.5,0.5), lty=2, col=2)
 #' text(x=L50, y=0.5, labels = paste0("L50 = ", round(L50,2)), pos=4, col=2 )
-#' 
-#' 
+#'
+#'
 #' }
-#' 
-#' 
+#'
+#'
+
+
+
 virtualPop <- function(
 tincr = 1/12,
 K.mu = 0.5, K.cv = 0.1,
@@ -143,10 +148,16 @@ Linf.mu = 80, Linf.cv = 0.1,
 ts = 0, C = 0.85,
 LWa = 0.01, LWb = 3,
 Lmat = 40, wmat = 8,
-rmax = 10000, beta = 1,
+rmaxBH = 10000, betaBH = 1,
 repro_wt = c(0,0,0,1,0,0,0,0,0,0,0,0),
-M = 0.7, harvest_rate = M, 
-L50 = 0.25*Linf.mu, wqs = L50*0.2,
+M = 0.7,
+Etf = 500,
+qtf = 0.001,
+harvest_rate = NaN,
+gear_types = "trawl",   # alternative: "gillnet"
+sel_list = list(mesh_size=100, mesh_size1=60,select_dist="lognormal",select_p1=3, select_p2=0.5),  # parameters adapted from the tilapia data set (increased spread)
+L50 = 0.25*Linf.mu,
+wqs = L50*0.2,
 bin.size = 1,
 timemin = 0, timemax = 20, timemin.date = as.Date("1980-01-01"),
 N0 = 10000,
@@ -155,11 +166,78 @@ lfqFrac = 1,
 progressBar = TRUE
 ){
 
+    ## Fishing mortality - effort - catchability
+
+    ## if E == single value, assuming one fleet and same effort for all fished years
+    if(length(as.numeric(Etf))==1){
+        Emat <- as.matrix(rep(Etf,length(fished_t)))
+    }
+    ## if E == matrix, rows = years and columns = fleets
+    if(class(Etf) == "matrix"){
+        Emat <- Etf
+    }else if(length(Etf)>1){
+        Emat <- as.matrix(Etf)
+    }
+
+    ## adapt q to Emat
+    if(length(qtf)==1){
+        qmat <- matrix(qtf, ncol=dim(Emat)[2], nrow=dim(Emat)[1])
+    }
+    if(class(qtf) == "matrix"){
+        if(dim(qtf)[1] != dim(Emat)[1]){
+            qmat <- matrix(rep(qft[1,], dim(Emat)[1]),ncol=dim(qft)[2],byrow=TRUE)
+        }else{
+            qmat <- qtf
+        }
+    }else if(length(qtf)>1){
+        qmat <- as.matrix(qtf)
+    }
+
+    ## If no harvest_rate provided assuming that effort * catchability = fishing mortality
+    if(is.na(harvest_rate) | is.nan(harvest_rate)){
+        harvest_rate <- Emat * qmat
+    }
+##    print(class(harvest_rate))
+   ## print(harvest_rate)
+
+    selfunc <- function(Lt, fleetNo){
+        if(is.na(fleetNo)){
+            gear_typesX <- gear_types
+            L50X <- L50
+            wqsX <- wqs
+            sel_listX <- sel_list
+        }else{
+            gear_typesX <- gear_types[fleetNo]
+        }
+    ##    print(gear_typesX)
+        switch(gear_typesX,
+               trawl ={
+                   if(!is.na(fleetNo)){
+                       L50X <- L50[fleetNo]
+                       wqsX <- wqs[fleetNo]
+                   }
+                   pSel <- logisticSelect(Lt=Lt, L50=L50X, wqs=wqsX)},
+               gillnet={
+                   if(!is.na(fleetNo)){
+                       sel_listX <- sel_list[[fleet_No]]
+                   }
+                   pSel <- do.call(fishdynr::gillnet, c(list(Lt=Lt),sel_listX))
+               },
+               stop(paste("\n",gear_typesX,"not recognized, possible options are: \n","trawl \n","gillnet \n")))
+        return(pSel)
+    }
+
+    ## ## if multiple fleets target the same stock, the harvest rate of each fleet is scaled according to the combined harvest rate - this only works if all fleets would have the same gear!
+    ## if(class(harvest_rate) == "matrix"){
+    ##     multimat <- harvest_rate / rowSums(harvest_rate)
+    ##     harvest_rate <- rowSums(harvest_rate * multimat)
+    ##    }
+
 # times
 timeseq = seq(from=timemin, to=timemax, by=tincr)
 if(!zapsmall(1/tincr) == length(repro_wt)) stop("length of repro_wt must equal the number of tincr in one year")
 repro_wt <- repro_wt/sum(repro_wt)
-repro_t <- rep(repro_wt, length=length(timeseq)) 
+repro_t <- rep(repro_wt, length=length(timeseq))
 # repro_t <- seq(timemin+repro_toy, timemax+repro_toy, by=1)
 
 # make empty lfq object
@@ -185,7 +263,7 @@ yeardec2date <- function(yeardec){as.Date(strptime(paste(yeardec%/%1, ceiling(ye
 make.inds <- function(
 	id=NaN, A = 1, L = 0, W=NaN, mat=0,
 	K = K.mu, Winf=NaN, Linf=NaN, phiprime=NaN,
-	F=NaN, Z=NaN, 
+	F=NaN, Z=NaN,
 	Fd=0, alive=1
 ){
   inds <- data.frame(
@@ -224,7 +302,7 @@ express.inds <- function(inds){
 
 grow.inds <- function(inds){
 	# grow
-  L2 <- dt_growth_soVB(Linf = inds$Linf, K = inds$K, ts = ts, C = C, L1 = inds$L, t1 = t-tincr, t2 = t)
+  L2 <- dt_growth_soVB(Linf = inds$Linf, K = inds$K, ts = ts, C = C, L1 = inds$L, t1 = tj-tincr, t2 = tj)
   # update length and weight
 	inds$L <- L2
 	inds$W <- LWa*inds$L^LWb
@@ -241,10 +319,38 @@ mature.inds <- function(inds){
 	return(inds)
 }
 
-death.inds <- function(inds){
-  pSel <- logisticSelect(inds$L, L50, wqs)
-  inds$F <- pSel * Fmax
-  inds$Z <- M + inds$F
+    death.inds <- function(inds){
+        ## multiple fleets
+        if(class(harvest_rate)=="matrix"){
+            if(dim(harvest_rate)[2]>=2){
+                pSel <- matrix(NaN, ncol=dim(harvest_rate)[2],nrow=dim(inds)[1])
+                for(seli in 1:(dim(harvest_rate)[2])){
+                    pSel[,seli] <- selfunc(Lt = inds$L, fleetNo = seli)
+                }
+                ## effective fishing mortality (in relation to selectivity) - per fleet with mutliple fleets
+                print(Fmax)
+                Feff <- pSel * Fmax
+                ## single fishing mortality value (per year) scaled according to F of each fleet
+                ## this calculation only works if there is fishery (Fmax in denominator not allowed to be 0, otherwise F = NaN and then Z = NaN), thus:
+                if(all(Fmax == 0)){
+                    inds$F <- 0
+                }else{
+                    inds$F <- as.numeric(rowSums(Feff * Fmax) / sum(Fmax))
+                }
+                print(head(inds$F))
+            }else{
+            ## single fleet
+                pSel <- selfunc(Lt = inds$L, fleetNo = NA)
+                print(Fmax)
+                inds$F <- as.numeric(pSel * Fmax)
+            }
+        }else{
+            ## single fleet
+            pSel <- selfunc(Lt = inds$L, fleetNo = NA)
+            print(Fmax)
+            inds$F <- as.numeric(pSel * Fmax)
+        }
+        inds$Z <- M + inds$F
 	pDeath <- 1 - exp(-inds$Z*tincr)
 	dead <- which(runif(nrow(inds)) < pDeath)
 	# determine if natural or fished
@@ -256,8 +362,8 @@ death.inds <- function(inds){
   	inds$Fd[dead] <- Fd
     rm(tmp)
 	}
-	return(inds)
-}
+        return(inds)
+    }
 
 remove.inds <- function(inds){
   dead <- which(inds$alive == 0)
@@ -267,20 +373,20 @@ remove.inds <- function(inds){
 
 reproduce.inds <- function(inds){
 	# reproduction can only occur of population contains >1 mature individual
-	if(repro > 0 & sum(inds$mat) > 0){
-		#calc. SSB
-	  SSB <- sum(inds$W*inds$mat)
-	  n.recruits <- ceiling(srrBH(rmax, beta, SSB) * repro)
-		# make recruits 
-		offspring <- make.inds(
-			id = seq(lastID+1, length.out=n.recruits)
-		)
-		# express genes in recruits
-		offspring <- express.inds(offspring)	
-		#combine all individuals
-		inds <- rbind(inds, offspring)
-	}	
-	return(inds)	
+    if(repro > 0 & sum(inds$mat) > 0){
+        ##calc. SSB
+        SSB <- sum(inds$W*inds$mat)
+        n.recruits <- ceiling(srrBH(rmaxBH, betaBH, SSB) * repro)
+        ## make recruits
+        offspring <- make.inds(
+            id = seq(lastID+1, length.out=n.recruits)
+        )
+        ## express genes in recruits
+        offspring <- express.inds(offspring)
+        ##combine all individuals
+        inds <- rbind(inds, offspring)
+    }
+    return(inds)
 }
 
 record.inds <- function(inds, ids=1:10, rec=NULL){
@@ -304,7 +410,7 @@ record.inds <- function(inds, ids=1:10, rec=NULL){
 			}
 		}
 	}
-	rec
+	return(rec)
 }
 
 
@@ -331,45 +437,57 @@ res$pop <- list(
 # simulation
 if(progressBar) pb <- txtProgressBar(min=1, max=length(timeseq), style=3)
 for(j in seq(timeseq)){
-  t <- timeseq[j]
-	
+    ##
+    tj <- timeseq[j]
+    ##
   # harvest rate applied? lfq sampled?
-  if(length(fished_t) == 0){
+  if(is.na(fished_t[1]) | is.nan(fished_t[1])){ ## before: length(fished_t) == 0 : as I see it fished_t never has length 0, even if set ot NA or NaN, it woudl have length 1
     Fmax <- 0
     lfqSamp <- 0
-  } else {
-    if(min(sqrt((t-fished_t)^2)) < 1e-8){
-      Fmax <- harvest_rate
-      lfqSamp <- 1
-    } else {
+  } else if(min(sqrt((tj-fished_t)^2)) < 1e-8){
+       ## time index for fished_t
+          tfish <- which.min(abs(fished_t - tj))
+          ## provide yearly Fmax value (per fleet if multiple fleets simulated)
+          if(class(harvest_rate) == "matrix"){
+              Fmax <- harvest_rate[tfish,]
+          }else if(length(harvest_rate)>1){
+             Fmax <- harvest_rate[tfish]
+          }else{
+              Fmax <- harvest_rate
+          }
+          lfqSamp <- 1
+          } else {
       Fmax <- 0
       lfqSamp <- 0
     }
-  }
-	
+
   repro <- repro_t[j]
-	
+
 	# population processes
 	inds <- grow.inds(inds)
 	inds <- mature.inds(inds)
 	inds <- reproduce.inds(inds)
-	inds <- death.inds(inds)
-  if(lfqSamp){
-    samp <- try( sample(seq(inds$L), ceiling(sum(inds$Fd)*lfqFrac), prob = inds$Fd), silent = TRUE)
-    # tmp <- try( sample(inds$L, ceiling(sum(inds$Fd)*lfqFrac), prob = inds$Fd), silent = TRUE)
+    inds <- death.inds(inds)
+    ## sample lfq data
+
+    if(lfqSamp){
+      samp <- try( sample(seq(inds$L), ceiling(sum(inds$Fd)*lfqFrac), prob = inds$Fd), silent = TRUE)
+##      print(samp)
+
+    ## tmp <- try( sample(inds$L, ceiling(sum(inds$Fd)*lfqFrac), prob = inds$Fd), silent = TRUE)
     if(class(samp) != "try-error"){
       lfq[[j]] <- inds$L[samp]
       indsSamp[[j]] <- inds[samp,]
     }
-    rm(samp) 
+    rm(samp)
   }
 	inds <- remove.inds(inds)
-	
+
 	# update results
 	res$pop$N[j] <- nrow(inds)
 	res$pop$B[j] <- sum(inds$W)
 	res$pop$SSB[j] <- sum(inds$W*inds$mat)
-	
+
 	if(progressBar) setTxtProgressBar(pb, j)
 
 }
@@ -377,27 +495,29 @@ if(progressBar) close(pb)
 
 
 
+
 # Export data -------------------------------------------------------------
 
-# Trim and Export 'lfq'
-lfq2 <- lfq[which(sapply(lfq, length) > 0)]
-
-
-# binned version of lfq
-dates <- yeardec2date( date2yeardec(timemin.date) + (as.numeric(names(lfq2)) - timemin) )
-Lran <- range(unlist(lfq2))
-Lran[1] <- floor(Lran[1])
-Lran[2] <- (ceiling(Lran[2])%/%bin.size + ceiling(Lran[2])%%bin.size + 1) * bin.size
-bin.breaks <- seq(Lran[1], Lran[2], by=bin.size)
-bin.mids <- bin.breaks[-length(bin.breaks)] + bin.size/2
-res$lfqbin <- list(
-  sample.no = seq(bin.mids),
-  midLengths = bin.mids,
-  dates = dates,
-  catch = sapply(lfq2, FUN = function(x){
-    hist(x, breaks=bin.breaks, plot = FALSE, include.lowest = TRUE)$counts
-  })
-)
+    ## for simulation of population without exploitation, necessary to make the lfq export optional:
+    if(any(!is.na(fished_t[1]) & !is.nan(fished_t[1])) & (lfqFrac != 0 & !is.na(lfqFrac) & !is.nan(lfqFrac))){
+        ## Trim and Export 'lfq'
+        lfq2 <- lfq[which(sapply(lfq, length) > 0)]
+        ## binned version of lfq
+        dates <- yeardec2date( date2yeardec(timemin.date) + (as.numeric(names(lfq2)) - timemin) )
+        Lran <- range(unlist(lfq2))
+        Lran[1] <- floor(Lran[1])
+        Lran[2] <- (ceiling(Lran[2])%/%bin.size + ceiling(Lran[2])%%bin.size + 1) * bin.size
+        bin.breaks <- seq(Lran[1], Lran[2], by=bin.size)
+        bin.mids <- bin.breaks[-length(bin.breaks)] + bin.size/2
+        res$lfqbin <- list(
+            sample.no = seq(bin.mids),
+            midLengths = bin.mids,
+            dates = dates,
+            catch = sapply(lfq2, FUN = function(x){
+                hist(x, breaks=bin.breaks, plot = FALSE, include.lowest = TRUE)$counts
+            })
+        )
+    }
 
 
 # individuals
@@ -414,6 +534,16 @@ res$growthpars <- list(
   phiprime = phiprime.mu,
   tmaxrecr = tmaxrecr
 )
+
+    ## fisheries dependent information
+    if(any(!is.na(fished_t) & !is.nan(fished_t))){
+        res$fisheries <- list(
+            fished_years = yeardec2date( date2yeardec(timemin.date) + (timeseq - timemin) )[fished_t],
+            E = Emat,
+            q = qmat,
+            F = harvest_rate
+        )
+    }
 
 
 return(res)
