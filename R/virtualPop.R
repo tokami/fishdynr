@@ -148,7 +148,8 @@ Linf.mu = 80, Linf.cv = 0.1,
 ts = 0, C = 0.85,
 LWa = 0.01, LWb = 3,
 Lmat = 40, wmat = 8,
-rmaxBH = 10000, betaBH = 1,
+rmaxBH = 10000,
+betaBH = 1, srr.cv = 0.1,
 repro_wt = c(0,0,0,1,0,0,0,0,0,0,0,0),
 M = 0.7,
 Etf = 500,
@@ -372,11 +373,13 @@ remove.inds <- function(inds){
 }
 
 reproduce.inds <- function(inds){
-	# reproduction can only occur of population contains >1 mature individual
+	## reproduction can only occur of population contains >1 mature individual
     if(repro > 0 & sum(inds$mat) > 0){
-        ##calc. SSB
+        ## calc. SSB
         SSB <- sum(inds$W*inds$mat)
         n.recruits <- ceiling(srrBH(rmaxBH, betaBH, SSB) * repro)
+        ## add noise to recruitment process
+        n.recruits <- n.recruits * rlnorm(1, 0, sdlog = srr.cv)
         ## make recruits
         offspring <- make.inds(
             id = seq(lastID+1, length.out=n.recruits)
