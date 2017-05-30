@@ -261,7 +261,7 @@ date2yeardec <- function(date){as.POSIXlt(date)$year+1900 + (as.POSIXlt(date)$yd
 yeardec2date <- function(yeardec){as.Date(strptime(paste(yeardec%/%1, ceiling(yeardec%%1*365+1), sep="-"), format="%Y-%j"))}
 
 make.inds <- function(
-	id=NaN, A = 1, L = 0, W=NaN, mat=0,
+	id=NaN, A = 0, L = 0, W=NaN, mat=0,
 	K = K.mu, Winf=NaN, Linf=NaN, phiprime=NaN,
 	F=NaN, Z=NaN,
 	Fd=0, alive=1
