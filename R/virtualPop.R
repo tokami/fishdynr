@@ -47,7 +47,7 @@
 #' in fish and invertebrates. Fishbyte (Philippines).
 #'
 #' @importFrom graphics hist
-#' @importFrom stats rlnorm runif
+#' @importFrom stats rlnorm runif weighted.mean
 #' @importFrom utils txtProgressBar setTxtProgressBar
 #' @importFrom stats qnorm rnorm
 #'
@@ -531,11 +531,14 @@ res$growthpars <- list(
   Linf = Linf.mu,
   C = C,
   ts = ts,
+  t_anchor = weighted.mean(date2yeardec(as.Date(paste("2015",which(repro_wt != 0),"15",sep="-"))) %% 1,
+              w =repro_wt[which(repro_wt != 0)]),  ## weighted mean of t_anchor
   phiprime = phiprime.mu,
   tmaxrecr = tmaxrecr
 )
 
     ## fisheries dependent information
+    ## if fisheries are simulated
     if(any(!is.na(fished_t) & !is.nan(fished_t))){
         res$fisheries <- list(
             fished_years = yeardec2date( date2yeardec(timemin.date) + (timeseq - timemin) )[fished_t],
