@@ -26,7 +26,7 @@
 #' @param timemin.date date corresponding to timemin (of "Date" class)
 #' @param tincr time increment for simulation (default = 1/12; i.e. 1 month)
 #' @param N0 starting number of individuals
-#' @param fished_t times when stock is fished
+#' @param fished_t times when stock is fished; when NA no exploitation simulated
 #' @param lfqFrac fraction of fished stock that are sampled for length frequency data (default = 0.1).
 #' @param progressBar Logical. Should progress bar be shown in console (Default=TRUE)
 #'
@@ -34,6 +34,8 @@
 #' The model creates variation in growth based on a mean phi prime value for the population,
 #' which describes relationship between individual Linf and K values. See Vakily (1992)
 #' for more details.
+#'
+#' @details The model takes around 5 to 10 years to reach equilibrium, i.e. no biomass changes independent from fishing activity, the actual time is dependent on N0, K.mu, Lmat, repro_wt  and rmax.BH. For the estimation of carrying capacity the first 10 years of the simulation are disregarded and only subsequent years where no fishing took place are used to estimate the annual mean carrying capacity (K). If fishing is simulated for all years or fishing activities start before ten years after simulation start no carrying capacity is estimated.
 #'
 #' @return a list containing growth parameters and length frequency object
 #'
@@ -199,8 +201,6 @@ progressBar = TRUE
     if(is.na(harvest_rate) | is.nan(harvest_rate)){
         harvest_rate <- Emat * qmat
     }
-##    print(class(harvest_rate))
-   ## print(harvest_rate)
 
     selfunc <- function(Lt, fleetNo){
         if(is.na(fleetNo)){
@@ -211,7 +211,6 @@ progressBar = TRUE
         }else{
             gear_typesX <- gear_types[fleetNo]
         }
-    ##    print(gear_typesX)
         switch(gear_typesX,
                trawl ={
                    if(!is.na(fleetNo)){
@@ -330,7 +329,6 @@ mature.inds <- function(inds){
                     pSel[,seli] <- selfunc(Lt = inds$L, fleetNo = seli)
                 }
                 ## effective fishing mortality (in relation to selectivity) - per fleet with mutliple fleets
-                print(Fmax)
                 Feff <- pSel * Fmax
                 ## single fishing mortality value (per year) scaled according to F of each fleet
                 ## this calculation only works if there is fishery (Fmax in denominator not allowed to be 0, otherwise F = NaN and then Z = NaN), thus:
@@ -339,17 +337,14 @@ mature.inds <- function(inds){
                 }else{
                     inds$F <- as.numeric(rowSums(Feff * Fmax) / sum(Fmax))
                 }
-                print(head(inds$F))
             }else{
             ## single fleet
                 pSel <- selfunc(Lt = inds$L, fleetNo = NA)
-                print(Fmax)
                 inds$F <- as.numeric(pSel * Fmax)
             }
         }else{
             ## single fleet
             pSel <- selfunc(Lt = inds$L, fleetNo = NA)
-            print(Fmax)
             inds$F <- as.numeric(pSel * Fmax)
         }
         inds$Z <- M + inds$F
@@ -476,7 +471,6 @@ for(j in seq(timeseq)){
 
     if(lfqSamp){
       samp <- try( sample(seq(inds$L), ceiling(sum(inds$Fd)*lfqFrac), prob = inds$Fd), silent = TRUE)
-##      print(samp)
 
     ## tmp <- try( sample(inds$L, ceiling(sum(inds$Fd)*lfqFrac), prob = inds$Fd), silent = TRUE)
     if(class(samp) != "try-error"){
@@ -497,6 +491,20 @@ for(j in seq(timeseq)){
 }
 if(progressBar) close(pb)
 
+
+    ## Estimate carrying capacity
+    ## only if years without fishing are simulated (subsequently to the first 10 years)
+    if(length(fished_t) < length(timeseq)){
+        startyear  <- as.POSIXlt(timemin.date)
+        startyear$year <- startyear$year + 10
+        year10 <- as.Date(startyear)
+        cutoff <- which.min(abs(yeardec2date( date2yeardec(timemin.date) + (timeseq - timemin)) - year10))
+        cc_years <- seq(timeseq)[-c((1:cutoff),which(round(timeseq,5) %in% round(fished_t, 5)))]
+        if(length(cc_years) > 3){
+            mod <- lm(res$pop$B[cc_years] ~ 1)
+            res$pop$K <- as.numeric(coefficients(mod))
+        }
+    }
 
 
 
