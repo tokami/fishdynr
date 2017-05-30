@@ -12,11 +12,12 @@
 #' @param wmat width between 25\% and 75\% quantiles for Lmat
 #' @param rmaxBH parameter for Beverton-Holt stock recruitment relationship (see \code{\link[fishdynr]{srrBH}})
 #' @param betaBH parameter for Beverton-Holt stock recruitment relationship (see \code{\link[fishdynr]{srrBH}})
+#' @param srr.cv coefficient of variation on number of recruits
 #' @param repro_wt weight of reproduction (vector of monthly reproduction weight)
 #' @param M natural mortality
-#' @param E effort (E = F / q)
-#' @param q catchability (default 0.005)
-#' @param harvest_rate Fishing mortality (i.e. 'F' = C/B)
+#' @param Etf  effort (E = F / q); single numeric, numeric vector for effort per year, or matrix for different fleets (columns) and different years (rows)
+#' @param qtf catchability (default 0.005); single numeric, numeric vector for effort per year, or matrix for different fleets (columns)  and different years (rows)
+#' @param harvest_rate Fishing mortality (i.e. 'F' = C/B); if NaN Etf and qtf are used to estimate the harvest_rate
 #' @param L50 minimum length of capture (in cm). Where selectivity equals 0.5. Assumes logistic ogive typical of trawl net selectivity.
 #' @param wqs width of selectivity ogive (in cm)
 #' @param bin.size resulting bin size for length frequencies (in cm)
