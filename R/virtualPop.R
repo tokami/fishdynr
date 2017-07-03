@@ -713,10 +713,22 @@ bio_list <- lapply(c_list, function(x) x * midWeights)
 Lmaxy <- unlist(lapply(bio_list, function(x) midLengths[x == max(x, na.rm = TRUE)]))
 res$refLev$Lmaxy <- as.numeric(Lmaxy)
 
-res$refLev$states <- data.frame()
-rownames(res$refLev$states) <- h
-colnames(res$refLev$states) <- j
-
+res$refLev$states <- data.frame("Lmax5/Linf" = round(Lmax5/Linf.mu,2),
+                                "L95/Linf" = round(L95/Linf.mu,2),
+                                "Pmega" = round(Pmega,3),
+                                "L25/Lmat" = round(L25/Lmat,2),
+                                "Lc/Lmat" = round(Lc/Lmat,2),
+                                "Lmean/Lopt" = round(Lmean/Lopt,2),
+                                "Lmaxy/Lopt" = round(Lmaxy/Lopt,2),
+                                "Lmean/LFeM" = round(Lmean/LFeM,2))
+res$refLev$statesRefPoint <- data.frame("Lmax5/Linf" = ">0.8",
+                                        "L95/Linf" = ">0.8",
+                                        "Pmega" = ">0.3",
+                                        "L25/Lmat" = ">1",
+                                        "Lc/Lmat" = ">1",
+                                        "Lmean/Lopt" = "=1",
+                                        "Lmaxy/Lopt" = "=1",
+                                        "Lmean/LFeM" = ">=1")
 
 # individuals
 indsSamp <- indsSamp[which(sapply(indsSamp, length) > 0)]
