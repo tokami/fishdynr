@@ -170,18 +170,20 @@ lfqFrac = 1,
 progressBar = TRUE
 ){
 
-    ## Fishing mortality - effort - catchability
-
-    ## if E == single value, assuming one fleet and same effort for all fished years
-    if(length(as.numeric(Etf))==1){
-        Emat <- as.matrix(rep(Etf,length(fished_t)))
-    }
-    ## if E == matrix, rows = years and columns = fleets
+    
+  ## Fishing mortality - effort - catchability
+  ## if E == single value, assuming one fleet and same effort for all fished years
+  if(length(as.numeric(Etf))==1){
+    Emat <- as.matrix(rep(Etf,length(fished_t)))
+    
+  ## if E == matrix, rows = years and columns = fleets
+    
     if(class(Etf) == "matrix"){
-        Emat <- Etf
+      Emat <- Etf
     }else if(length(Etf)>1){
-        Emat <- as.matrix(Etf)
+      Emat <- as.matrix(Etf)
     }
+    
 
     ## adapt q to Emat
     if(length(qtf)==1){
@@ -575,6 +577,10 @@ if(length(cc_years) > 3){
   mod <- lm(resf0$pop$SSB[cc_years] ~ 1)
   resf0$pop$SSBf0 <- as.numeric(coefficients(mod))
 }
+if(length(cc_years) > 3){
+  mod <- lm(res$pop$SSB[cc_years] ~ 1)
+  res$pop$SSBf <- as.numeric(coefficients(mod))
+}
 
 ## estimate K, r, n 
 resSPM <- optim(par = c(resf0$pop$K, 0.5, 2), fn = spm, B0 = resf0$pop$B[1])
@@ -602,9 +608,22 @@ resf0$pop$r <- rest
 resf0$pop$n <- nest
 resf0$pop$m <- m
 resf0$pop$gamma <- gammal
-resf0$pop$Bdmsy <- Bdmsy
-resf0$pop$msyd <- msyd
-resf0$pop$Fdmsy <- Fdmsy
+
+## Saving reference levels
+res$refLev <- list()
+temp1 <- aggregate(res$pop$SSB, 
+                           by = list(years = format(res$pop$dates, "%Y")), 
+                                     FUN = mean, na.rm=TRUE) 
+temp2 <- aggregate(resf0$pop$SSB, 
+                   by = list(years = format(resf0$pop$dates, "%Y")), 
+                   FUN = mean, na.rm=TRUE) 
+## SPR
+res$refLev$years <- temp1$years
+res$refLev$SPR <- temp1$x / temp2$x
+## SPM refs
+res$refLev$Bdmsy <- Bdmsy
+res$refLev$msyd <- msyd
+res$refLev$Fdmsy <- Fdmsy
 
 ## Production curve
 spmPlot <- spm2(c(res$pop$B[1], Kest,  rest, nest))
@@ -634,6 +653,71 @@ Prod <- (rest / (nest - 1)) * spmPlot * (1 - (spmPlot / Kest)^(nest-1))
     }
 
 
+## LBIs
+## aggregate lfq data per year
+c_sum <- with(res$lfqbin,by(t(catch), format(dates, "%Y"), FUN = colSums))
+c_list <- lapply(as.list(c_sum), c)
+midLengths <- res$lfqbin$midLengths
+dates <- unique(as.Date(paste0(format(dates, "%Y"), "-01-01")))
+## cumulative and percentage cumulative catches
+cumSum <- lapply(c_list, cumsum)
+cumSum_perc <- vector("list",length(dates))
+for(i in 1:length(c_list)){
+  cumSum_perc[[i]] <- cumSum[[i]] / sum(c_list[[i]])
+}
+
+## mean length of largest 5% (/Linf >.8)
+numb <- lapply(c_list, function(x) x[rev(order(midLengths))])    # from largest starting
+midLengthsRev <- midLengths[rev(order(midLengths))]
+Lmax5 <- vector('numeric',length(dates))
+for(i in 1:length(dates)){
+  numbcum <- cumsum(numb[[i]]) 
+  numbcumperc <- round(numbcum / sum(numb[[i]]),5)
+  numbnum5 <- rep(0, length(numbcumperc))
+  numbnum5[numbcumperc <= 0.05] <- numb[[i]][numbcumperc <= 0.05]
+  numbnum5[max(which(numbcumperc <= 0.05),na.rm = TRUE) + 1] <- (0.05 - numbcumperc[max(which(numbcumperc <= 0.05),na.rm = TRUE)]) * sum(numb[[i]])
+  Lmax5[i] <- sum(numbnum5 * midLengthsRev, na.rm = TRUE) / sum(numbnum5, na.rm = TRUE)
+}
+res$refLev$Lmax5 <- round(Lmax5,2)
+## 95th percentile (/Linf >.8)
+L95 <- unlist(lapply(cumSum_perc, function(x) min(midLengths[which(x >= 0.95)],na.rm=TRUE)))
+res$refLev$L95 <- L95
+## Pmega (Lopt + 10%) (>.3)
+Lopt <- (2 / 3) * Linf.mu
+Pmega <- vector('numeric', length(dates))
+for(i in 1:length(dates)){
+  Pmega[i] <- sum(c_list[[i]][which(midLengths >= (Lopt + 0.1 * Lopt))], na.rm = TRUE) / 
+    sum(c_list[[i]], na.rm = TRUE)
+}
+res$refLev$Pmega <- Pmega
+res$refLev$Lopt <- Lopt
+## 25th percentile of length distribution (/Lmat >1)
+L25 <- unlist(lapply(cumSum_perc, function(x) min(midLengths[which(x >= 0.25)],na.rm=TRUE)))
+res$refLev$L25 <- L25
+## Lc (/Lmat >1)  ICES: Lc (Length at first catch = 50% of mode)
+Lc <- L50   ## check again with gillnet selectivity, then ICES formula
+res$refLev$Lc <- Lc
+## mean length of individuals > Lc (/Lopt ~1 ; /LF=M >= 1)
+c_listLC <- lapply(c_list, function(x) x[midLengths >= Lc])
+midLengthsLC <- midLengths[midLengths >= Lc]
+Lmean <- vector('numeric', length(dates))
+for(i in 1:length(c_listLC)){
+  Lmean[i] <- sum(midLengthsLC * c_listLC[[i]], na.rm = TRUE) / sum(c_listLC[[i]], na.rm = TRUE)
+}
+LFeM <- 0.75 * Lc + 0.25 * Linf.mu
+res$refLev$Lmean <- round(Lmean,2)
+res$refLev$LFeM <- LFeM
+## length class with maximum in biomass (/Lopt ~1)
+midWeights <- LWa * midLengths ^ LWb
+bio_list <- lapply(c_list, function(x) x * midWeights)
+Lmaxy <- unlist(lapply(bio_list, function(x) midLengths[x == max(x, na.rm = TRUE)]))
+res$refLev$Lmaxy <- as.numeric(Lmaxy)
+
+res$refLev$states <- data.frame()
+rownames(res$refLev$states) <- h
+colnames(res$refLev$states) <- j
+
+
 # individuals
 indsSamp <- indsSamp[which(sapply(indsSamp, length) > 0)]
 res$inds <- indsSamp
@@ -646,7 +730,7 @@ res$growthpars <- list(
   C = C,
   ts = ts,
   t_anchor = weighted.mean(date2yeardec(as.Date(paste("2015",which(repro_wt != 0),"15",sep="-"))) %% 1,
-              w =repro_wt[which(repro_wt != 0)]),  ## weighted mean of t_anchor
+              w = repro_wt[which(repro_wt != 0)]),  ## weighted mean of t_anchor
   phiprime = phiprime.mu,
   tmaxrecr = tmaxrecr
 )
