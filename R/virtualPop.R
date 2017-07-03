@@ -581,9 +581,32 @@ resSPM <- optim(par = c(resf0$pop$K, 0.5, 2), fn = spm, B0 = resf0$pop$B[1])
 Kest <- resSPM$par[1]
 rest <- resSPM$par[2]
 nest <- resSPM$par[3]
+gammal <- nest^(nest/(nest-1))/(nest-1)
+m <- rest * Kest / (nest^(nest/(nest-1)))
+## Deterministic reference levels
+if(nest == 1){
+  ## Fox reference levels
+  Bdmsy <- Kest/exp(1)
+  msyd <- rest * Kest / exp(1)
+  Fdmsy <- rest
+}else{
+  ## Pella and Tomlinson reference levels
+  Bdmsy <- nest^(1/(1-nest)) * Kest
+  msyd <- m
+  Fdmsy <- m/Bdmsy
+}
+
+## save parameters
 resf0$pop$K2 <- Kest
 resf0$pop$r <- rest
 resf0$pop$n <- nest
+resf0$pop$m <- m
+resf0$pop$gamma <- gammal
+resf0$pop$Bdmsy <- Bdmsy
+resf0$pop$msyd <- msyd
+resf0$pop$Fdmsy <- Fdmsy
+
+## Production curve
 spmPlot <- spm2(c(res$pop$B[1], Kest,  rest, nest))
 Prod <- (rest / (nest - 1)) * spmPlot * (1 - (spmPlot / Kest)^(nest-1))
 
@@ -646,12 +669,14 @@ if(plot){
   ## Numbers
   with(res$pop, plot(dates, N, type='l', lwd=2, 
                      xlab="",ylab="Numbers",
+                     main = "Population trajectory",
                      ylim=c(0,max(resf0$pop$N,na.rm=TRUE))))
   with(resf0$pop, lines(dates, N, col=4, lwd=2))
   points(res$pop$dates[1], N0,pch=4, lwd=2, col='darkred')
   ## Biomass  + SSB
   with(res$pop, plot(dates, B, type='l', lwd=2, 
                      xlab="",ylab="Biomass",
+                     main = "Biomass trajectory",
                      ylim=c(0,max(resf0$pop$B,na.rm=TRUE))))
   with(res$pop, lines(dates, SSB, lwd=2, lty=3))
   with(resf0$pop, lines(dates, B, col=4, lwd=2))
@@ -659,14 +684,28 @@ if(plot){
   abline(h = resf0$pop$K, col='darkred', lwd=2)
   abline(h = resf0$pop$SSBf0, col='darkred', lwd=2,lty=3)
   ## SPM
-  with(resf0$pop, plot(dates, B, type='l', lwd=2, 
+  with(resf0$pop, plot(dates, B, type='b', lwd=2,
                      xlab="",ylab="Biomass",col=4,
+                     pch=16,
+                     main = "Surplus production model",
                      ylim=c(0,max(resf0$pop$B,na.rm=TRUE))))
-  with(resf0$pop, lines(dates, spmPlot, lwd=2, lty=3, col = 'darkred'))
+  abline(h = resf0$pop$K2,lwd=2, lty=3, col = 'darkred')
+  with(resf0$pop, lines(dates, spmPlot, lwd=2, lty=1, col = 'darkred'))
   ## Production curve
   plot(spmPlot, Prod, type='l', lwd=2, col = 4, 
-       xlab="Biomass",ylab="Surplus production")
-  abline(v = resf0$pop$K2, col = "darkred", lty=3, lwd=2)
+       main = "Production curve",
+       xlab="Biomass",ylab="Surplus production", ylim = c(0,max(Prod,na.rm=TRUE)*1.1))
+  segments(x0 = 0, y0 = msyd, x1 = Bdmsy, y1 = msyd, col = "darkred", lty=3, lwd=2)
+  segments(x0 = Bdmsy, y0 = 0, x1 = Bdmsy, y1 = msyd, col = "darkred", lty=3, lwd=2)
+  
+  
+  
+  
+  ## Legend
+  plot.new()
+  legend("center", legend=c("fishing", "no fishing", "population parameters"),
+         col=c("black","blue", "darkred"), lwd=2, lty=1, bty='n', 
+         y.intersp = 0.4, x.intersp = 0.3, seg.len = 0.2)
   
   par(opar)
 }
