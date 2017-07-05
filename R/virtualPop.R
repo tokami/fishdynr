@@ -151,8 +151,8 @@ Linf.mu = 80, Linf.cv = 0.1,
 t0 = -0.03,
 ts = 0, C = 0.85,
 LWa = 0.01, LWb = 3,
-Lmat.m = 40, wmat.m = 8,
-Lmat.f = 40, wmat.f = 8,
+Lmat.f = 40, wmat.f = 7,
+Lmat.m = 35, wmat.m = 8,
 rmaxBH = 1000,
 betaBH = 1, srr.cv = 0.1,
 repro_wt = c(0,0,0,1,0,0,0,0,0,0,0,0),
@@ -341,8 +341,8 @@ reproduce.inds <- function(inds, seed, save = FALSE){
         SSB <- sum(inds$W*inds$mat)
         n.recruits <- ceiling(srrBH(rmaxBH, betaBH, SSB) * repro)
         ## add noise to recruitment process
-        seed3 <- seed + 3
-        set.seed(seed3)
+        seed5 <- seed + 5
+        set.seed(seed5)
         n.recruits <- n.recruits * rlnorm(1, 0, sdlog = srr.cv)
         ## save SSB + n.recruits for stock recruitment plot
         if(save) stockRec <<- rbind(stockRec, data.frame(SSB = SSB, recruits = n.recruits))
@@ -388,16 +388,16 @@ death.inds <- function(inds, seed, f0 = FALSE){
   inds$Z <- M + inds$F
   if(f0) inds$Z <- M
   pDeath <- 1 - exp(-inds$Z*tincr)
-  seed4 <- seed + 4
-  set.seed(seed4)
+  seed6 <- seed + 6
+  set.seed(seed6)
   dead <- which(runif(nrow(inds)) < pDeath)
   # determine if natural or fished
   if(length(dead) > 0){
     inds$alive[dead] <- 0
     tmp <- cbind(inds$F[dead], inds$Z[dead])
     # Fd=1 for fished individuals; Fd=0, for those that died naturally
-    seed5 <- seed + 5
-    set.seed(seed5)
+    seed7 <- seed + 7
+    set.seed(seed7)
     Fd <- apply(tmp, 1, FUN=function(x){sample(c(0,1), size=1, prob=c(M/x[2], x[1]/x[2]) )})
     inds$Fd[dead] <- Fd
     rm(tmp)
@@ -710,6 +710,7 @@ res$refLev$Lopt <- Lopt
 ## 25th percentile of length distribution (/Lmat >1)
 L25 <- unlist(lapply(cumSum_perc, function(x) min(midLengths[which(x >= 0.25)],na.rm=TRUE)))
 res$refLev$L25 <- L25
+Lmat <- mean(c(Lmat.f,Lmat.m))
 ## Lc (/Lmat >1)  ICES: Lc (Length at first catch = 50% of mode)
 Lc <- L50   ## check again with gillnet selectivity, then ICES formula
 res$refLev$Lc <- Lc
