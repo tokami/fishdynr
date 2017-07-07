@@ -4,22 +4,27 @@
 #' @param K.cv coefficient of variation on K
 #' @param Linf.mu mean Linf (infinite length parameter from von Bertalanffy growth function)
 #' @param Linf.cv coefficient of variation on Linf
+#' @param t0 theoretical age at length 0
 #' @param ts summer point (range 0 to 1) (parameter from seasonally oscillating von Bertalanffy growth function)
 #' @param C strength of seasonal oscillation (range 0 to 1) (parameter from seasonally oscillating von Bertalanffy growth function)
 #' @param LWa length-weight relationship constant 'a' (W = a*L^b). Model assumed length in cm and weight in kg.
 #' @param LWb length-weight relationship constant 'b' (W = a*L^b). Model assumed length in cm and weight in kg.
-#' @param Lmat length at maturity (where 50\% of individuals are mature)
-#' @param wmat width between 25\% and 75\% quantiles for Lmat
+#' @param Lmat.f length at maturity for females (where 50\% of individuals are mature)
+#' @param wmat.f width between 25\% and 75\% quantiles for Lmat for females
+#' @param Lmat.m length at maturity for males(where 50\% of individuals are mature)
+#' @param wmat.m width between 25\% and 75\% quantiles for Lmat for males
 #' @param rmaxBH parameter for Beverton-Holt stock recruitment relationship (see \code{\link[fishdynr]{srrBH}})
 #' @param betaBH parameter for Beverton-Holt stock recruitment relationship (see \code{\link[fishdynr]{srrBH}})
-#' @param srr.cv coefficient of variation on number of recruits
+#' @param srr.cv coefficient of variation stock recruitment relationship
 #' @param repro_wt weight of reproduction (vector of monthly reproduction weight)
 #' @param M natural mortality
 #' @param Etf  effort (E = F / q); single numeric, numeric vector for effort per year, or matrix for different fleets (columns) and different years (rows)
 #' @param qtf catchability (default 0.005); single numeric, numeric vector for effort per year, or matrix for different fleets (columns)  and different years (rows)
 #' @param harvest_rate Fishing mortality (i.e. 'F' = C/B); if NaN Etf and qtf are used to estimate the harvest_rate
+#' @param gear_types Character(s) defining the gear of the fishing fleet(s) (so far: either "trawl" or "gillnet")
 #' @param L50 minimum length of capture (in cm). Where selectivity equals 0.5. Assumes logistic ogive typical of trawl net selectivity.
 #' @param wqs width of selectivity ogive (in cm)
+#' @param sel_list list with selectivities parameters for gillnet selectivity
 #' @param bin.size resulting bin size for length frequencies (in cm)
 #' @param timemin time at start of simulation (in years). Typically set to zero.
 #' @param timemax time at end of simulation (in years).
@@ -29,6 +34,7 @@
 #' @param fished_t times when stock is fished; when NA no exploitation simulated
 #' @param lfqFrac fraction of fished stock that are sampled for length frequency data (default = 0.1).
 #' @param progressBar Logical. Should progress bar be shown in console (Default=TRUE)
+#' @param plot Logical. Should the standard plots be printed (Default=TRUE)
 #'
 #' @description See \code{\link[fishdynr]{dt_growth_soVB}} for information on growth function.
 #' The model creates variation in growth based on a mean phi prime value for the population,
@@ -53,6 +59,7 @@
 #' @importFrom stats rlnorm runif weighted.mean
 #' @importFrom utils txtProgressBar setTxtProgressBar
 #' @importFrom stats qnorm rnorm
+#' @importFrom TropFishR VBGF
 #'
 #' @export
 #'
@@ -151,8 +158,8 @@ Linf.mu = 80, Linf.cv = 0.1,
 t0 = -0.03,
 ts = 0, C = 0.85,
 LWa = 0.01, LWb = 3,
-Lmat.f = 40, wmat.f = 7,
-Lmat.m = 35, wmat.m = 8,
+Lmat.f = 0.5*Linf.mu, wmat.f = Lmat.f*0.2,
+Lmat.m = 0.45*Linf.mu, wmat.m = Lmat.m*0.15,
 rmaxBH = 1000,
 betaBH = 1, srr.cv = 0.1,
 repro_wt = c(0,0,0,1,0,0,0,0,0,0,0,0),
@@ -161,13 +168,13 @@ Etf = 500,
 qtf = 0.001,
 harvest_rate = NaN,
 gear_types = "trawl",   # alternative: "gillnet"
-sel_list = list(mesh_size=100, mesh_size1=60,select_dist="lognormal",select_p1=3, select_p2=0.5),  # parameters adapted from the tilapia data set (increased spread)
 L50 = 0.25*Linf.mu,
 wqs = L50*0.2,
+sel_list = list(mesh_size=100, mesh_size1=60,select_dist="lognormal",select_p1=3, select_p2=0.5),  # parameters adapted from the tilapia data set (increased spread)
 bin.size = 1,
-timemin = 0, timemax = 20, timemin.date = as.Date("1980-01-01"),
+timemin = 0, timemax = 25, timemin.date = as.Date("1980-01-01"),
 N0 = 1000,
-fished_t = seq(17,20,tincr),
+fished_t = seq(17,25,tincr),
 lfqFrac = 1,
 progressBar = TRUE,
 plot = TRUE
@@ -186,7 +193,6 @@ plot = TRUE
       Emat <- as.matrix(Etf)
     }
     
-
     ## adapt q to Emat
     if(length(qtf)==1){
         qmat <- matrix(qtf, ncol=dim(Emat)[2], nrow=dim(Emat)[1])
@@ -268,8 +274,7 @@ yeardec2date <- function(yeardec){as.Date(strptime(paste(yeardec%/%1, ceiling(ye
 make.inds <- function(
 	id=NaN, A = 0, L = 0, W=NaN, sex = NaN, mat=0,
 	K = K.mu, Winf=NaN, Linf=NaN, phiprime=NaN,
-	F=NaN, Z=NaN,
-	Fd=0, alive=1
+	F=NaN, Z=NaN, Fd=0, alive=1
 ){
   inds <- data.frame(
     id = id,
@@ -435,7 +440,7 @@ record.inds <- function(inds, ids=1:10, rec=NULL){
 	return(rec)
 }
 
-spm <- function(x, B0){
+spmOpt <- function(x, B0){
   K = x[1]
   r = x[2]
   n = x[3]
@@ -447,7 +452,7 @@ spm <- function(x, B0){
   sum((resf0$pop$B - Bthat)^2)
 }
 
-spm2 <- function(pars){
+spmPlot <- function(pars){
   B0 <- pars[1]
   K <- pars[2]
   r <- pars[3]
@@ -587,7 +592,7 @@ if(length(cc_years) > 3){
 }
 
 ## estimate K, r, n 
-resSPM <- optim(par = c(resf0$pop$K, 1, 2), fn = spm, B0 = resf0$pop$B[1])
+resSPM <- optim(par = c(resf0$pop$K, 1, 2), fn = spmOpt, B0 = resf0$pop$B[1])
 Kest <- resSPM$par[1]
 rest <- resSPM$par[2]
 nest <- resSPM$par[3]
@@ -642,8 +647,8 @@ if(any(!is.na(as.numeric(harvest_rate)))){
 }
 
 ## Production curve
-spmPlot <- spm2(c(res$pop$B[1], Kest,  rest, nest))
-Prod <- (rest / (nest - 1)) * spmPlot * (1 - (spmPlot / Kest)^(nest-1))
+bioPlot <- spmPlot(c(res$pop$B[1], Kest,  rest, nest))
+Prod <- (rest / (nest - 1)) * bioPlot * (1 - (bioPlot / Kest)^(nest-1))
 
 # Export data -------------------------------------------------------------
 
@@ -761,6 +766,9 @@ res$refLev$statesRefPoint <- data.frame("Lmax5/Linf" = ">0.8",
                                         "F/Fmsy" = "<=1",
                                         "B/Bmsy" = ">=1")
 
+## estimate LBIs again specific for males and females
+
+
 # individuals
 indsSamp <- indsSamp[which(sapply(indsSamp, length) > 0)]
 res$inds <- indsSamp
@@ -773,8 +781,8 @@ res$growthpars <- list(
   t0 = t0,
   C = C,
   ts = ts,
-  ##t_anchor = weighted.mean(date2yeardec(as.Date(paste("2015",which(repro_wt != 0),"15",sep="-"))) %% 1,
-  ##            w = repro_wt[which(repro_wt != 0)]),  ## weighted mean of t_anchor
+  t_anchor = weighted.mean(date2yeardec(as.Date(paste("2015",which(repro_wt != 0),"15",sep="-"))) %% 1,
+              w = repro_wt[which(repro_wt != 0)]),  ## weighted mean of t_anchor
   phiprime = phiprime.mu,
   tmaxrecr = tmaxrecr
 )
@@ -818,9 +826,9 @@ if(plot){
                      main = "Surplus production model",
                      ylim=c(0,max(resf0$pop$B,na.rm=TRUE))))
   abline(h = resf0$pop$K2,lwd=2, lty=3, col = 'darkred')
-  with(resf0$pop, lines(dates, spmPlot, lwd=2, lty=1, col = 'darkred'))
+  with(resf0$pop, lines(dates, bioPlot, lwd=2, lty=1, col = 'darkred'))
   ## Production curve
-  plot(spmPlot, Prod, type='l', lwd=2, col = 'dodgerblue2', 
+  plot(bioPlot, Prod, type='l', lwd=2, col = 'dodgerblue2', 
        main = "Production curve",
        xlab="Biomass",ylab="Surplus production", ylim = c(0,max(Prod,na.rm=TRUE)*1.1))
   segments(x0 = 0, y0 = msyd, x1 = Bdmsy, y1 = msyd, col = "darkred", lty=3, lwd=2)
@@ -828,7 +836,7 @@ if(plot){
   
   ## growth curve?
   Lplot <- seq(0,Linf.mu+10,0.1)
-  suppressWarnings(agePlot <- TropFishR::VBGF(res$growthpars, L = Lplot))
+  suppressWarnings(agePlot <- TropFishR::VBGF(res$growthpars[1:5], L = Lplot))
   ages <- unlist(lapply(indsSamp, function(x) x[["A"]]))
   lengths <- unlist(lapply(indsSamp, function(x) x[["L"]]))
   plot(ages, lengths, pch=16, 
@@ -850,7 +858,7 @@ if(plot){
   ## Legend
   par(mar=c(0,0,0,0))
   plot.new()
-  legend("center", legend=c("fishing", "no fishing", "B0, K, Kssb, refs"),
+  legend("center", legend=c("fishing", "no fishing", "Reference levels"),
          ncol = 3,
         col=c("black",'dodgerblue2', "darkred"), lwd=2, lty=1, bty='n', 
         x.intersp = 0.4, seg.len = 0.5,cex=1.1)

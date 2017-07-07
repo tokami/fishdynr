@@ -5,12 +5,16 @@
 \title{Virtual fish population}
 \usage{
 virtualPop(tincr = 1/12, K.mu = 0.5, K.cv = 0.1, Linf.mu = 80,
-  Linf.cv = 0.1, ts = 0, C = 0.85, LWa = 0.01, LWb = 3, Lmat = 40,
-  wmat = 8, rmax = 10000, beta = 1, repro_wt = c(0, 0, 0, 1, 0, 0, 0, 0,
-  0, 0, 0, 0), M = 0.7, harvest_rate = M, L50 = 0.25 * Linf.mu,
-  wqs = L50 * 0.2, bin.size = 1, timemin = 0, timemax = 20,
-  timemin.date = as.Date("1980-01-01"), N0 = 10000, fished_t = seq(17, 20,
-  tincr), lfqFrac = 1, progressBar = TRUE)
+  Linf.cv = 0.1, t0 = -0.03, ts = 0, C = 0.85, LWa = 0.01, LWb = 3,
+  Lmat.f = 40, wmat.f = 7, Lmat.m = 35, wmat.m = 8, rmaxBH = 1000,
+  betaBH = 1, srr.cv = 0.1, repro_wt = c(0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+  0), M = 0.7, Etf = 500, qtf = 0.001, harvest_rate = NaN,
+  gear_types = "trawl", L50 = 0.25 * Linf.mu, wqs = L50 * 0.2,
+  sel_list = list(mesh_size = 100, mesh_size1 = 60, select_dist = "lognormal",
+  select_p1 = 3, select_p2 = 0.5), bin.size = 1, timemin = 0,
+  timemax = 25, timemin.date = as.Date("1980-01-01"), N0 = 1000,
+  fished_t = seq(17, 25, tincr), lfqFrac = 1, progressBar = TRUE,
+  plot = TRUE)
 }
 \arguments{
 \item{tincr}{time increment for simulation (default = 1/12; i.e. 1 month)}
@@ -23,6 +27,8 @@ virtualPop(tincr = 1/12, K.mu = 0.5, K.cv = 0.1, Linf.mu = 80,
 
 \item{Linf.cv}{coefficient of variation on Linf}
 
+\item{t0}{theoretical age at length 0}
+
 \item{ts}{summer point (range 0 to 1) (parameter from seasonally oscillating von Bertalanffy growth function)}
 
 \item{C}{strength of seasonal oscillation (range 0 to 1) (parameter from seasonally oscillating von Bertalanffy growth function)}
@@ -31,23 +37,37 @@ virtualPop(tincr = 1/12, K.mu = 0.5, K.cv = 0.1, Linf.mu = 80,
 
 \item{LWb}{length-weight relationship constant 'b' (W = a*L^b). Model assumed length in cm and weight in kg.}
 
-\item{Lmat}{length at maturity (where 50\% of individuals are mature)}
+\item{Lmat.f}{length at maturity for females (where 50\% of individuals are mature)}
 
-\item{wmat}{width between 25\% and 75\% quantiles for Lmat}
+\item{wmat.f}{width between 25\% and 75\% quantiles for Lmat for females}
 
-\item{rmax}{parameter for Beverton-Holt stock recruitment relationship (see \code{\link[fishdynr]{srrBH}})}
+\item{Lmat.m}{length at maturity for males(where 50\% of individuals are mature)}
 
-\item{beta}{parameter for Beverton-Holt stock recruitment relationship (see \code{\link[fishdynr]{srrBH}})}
+\item{wmat.m}{width between 25\% and 75\% quantiles for Lmat for males}
+
+\item{rmaxBH}{parameter for Beverton-Holt stock recruitment relationship (see \code{\link[fishdynr]{srrBH}})}
+
+\item{betaBH}{parameter for Beverton-Holt stock recruitment relationship (see \code{\link[fishdynr]{srrBH}})}
+
+\item{srr.cv}{coefficient of variation stock recruitment relationship}
 
 \item{repro_wt}{weight of reproduction (vector of monthly reproduction weight)}
 
 \item{M}{natural mortality}
 
-\item{harvest_rate}{Fishing mortality (i.e. 'F')}
+\item{Etf}{effort (E = F / q); single numeric, numeric vector for effort per year, or matrix for different fleets (columns) and different years (rows)}
+
+\item{qtf}{catchability (default 0.005); single numeric, numeric vector for effort per year, or matrix for different fleets (columns)  and different years (rows)}
+
+\item{harvest_rate}{Fishing mortality (i.e. 'F' = C/B); if NaN Etf and qtf are used to estimate the harvest_rate}
+
+\item{gear_types}{Character(s) defining the gear of the fishing fleet(s) (so far: either "trawl" or "gillnet")}
 
 \item{L50}{minimum length of capture (in cm). Where selectivity equals 0.5. Assumes logistic ogive typical of trawl net selectivity.}
 
 \item{wqs}{width of selectivity ogive (in cm)}
+
+\item{sel_list}{list with selectivities parameters for gillnet selectivity}
 
 \item{bin.size}{resulting bin size for length frequencies (in cm)}
 
@@ -59,11 +79,13 @@ virtualPop(tincr = 1/12, K.mu = 0.5, K.cv = 0.1, Linf.mu = 80,
 
 \item{N0}{starting number of individuals}
 
-\item{fished_t}{times when stock is fished}
+\item{fished_t}{times when stock is fished; when NA no exploitation simulated}
 
 \item{lfqFrac}{fraction of fished stock that are sampled for length frequency data (default = 0.1).}
 
 \item{progressBar}{Logical. Should progress bar be shown in console (Default=TRUE)}
+
+\item{plot}{Logical. Should the standard plots be printed (Default=TRUE)}
 }
 \value{
 a list containing growth parameters and length frequency object
@@ -71,8 +93,11 @@ a list containing growth parameters and length frequency object
 \description{
 See \code{\link[fishdynr]{dt_growth_soVB}} for information on growth function.
 The model creates variation in growth based on a mean phi prime value for the population,
-which describes relationship between individual Linf and K values. See Vakily (1992) 
+which describes relationship between individual Linf and K values. See Vakily (1992)
 for more details.
+}
+\details{
+The model takes around 5 to 10 years to reach equilibrium, i.e. no biomass changes independent from fishing activity, the actual time is dependent on N0, K.mu, Lmat, repro_wt  and rmax.BH. For the estimation of carrying capacity the first 10 years of the simulation are disregarded and only subsequent years where no fishing took place are used to estimate the annual mean carrying capacity (K). If fishing is simulated for all years or fishing activities start before ten years after simulation start no carrying capacity is estimated.
 }
 \examples{
 \donttest{
@@ -161,12 +186,12 @@ text(x=L50, y=0.5, labels = paste0("L50 = ", round(L50,2)), pos=4, col=2 )
 
 }
 \references{
-Vakily, J.M., 1992. Determination and comparison of bivalve growth, 
+Vakily, J.M., 1992. Determination and comparison of bivalve growth,
 with emphasis on Thailand and other tropical areas. WorldFish.
 
-Munro, J.L., Pauly, D., 1983. A simple method for comparing the growth 
+Munro, J.L., Pauly, D., 1983. A simple method for comparing the growth
 of fishes and invertebrates. Fishbyte 1, 5-6.
 
-Pauly, D., Munro, J., 1984. Once more on the comparison of growth 
+Pauly, D., Munro, J., 1984. Once more on the comparison of growth
 in fish and invertebrates. Fishbyte (Philippines).
 }

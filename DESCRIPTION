@@ -9,6 +9,9 @@ Description: Contains functions for describing fish growth, mortality,
   recruitment etc., as well as several models for simulating population 
   dynamics and management.
 License: GPL-3
+Depends:
+    R (>= 3.0),
+    TropFishR
 BugReports: https://github.com/marchtaylor/fishdynr/issues
 URL: https://github.com/marchtaylor/fishdynr
 RoxygenNote: 6.0.1
