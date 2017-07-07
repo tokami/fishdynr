@@ -582,7 +582,7 @@ if(progressBar) close(pb)
 ## Estimate carrying capacity
 ## Alternative way build into loop above
 startyear  <- as.POSIXlt(timemin.date)
-startyear$year <- startyear$year + 10
+startyear$year <- startyear$year + 20
 year10 <- as.Date(startyear)
 cutoff <- which.min(abs(yeardec2date( date2yeardec(timemin.date) + (timeseq - timemin)) - year10))
 cc_years <- seq(timeseq)[-(1:cutoff)]
@@ -626,38 +626,6 @@ resf0$pop$n <- nest
 resf0$pop$m <- m
 resf0$pop$gamma <- gammal
 
-## Saving reference levels
-fished_dates <- yeardec2date(date2yeardec(timemin.date) + (fished_t - timemin))
-fished_index <- seq(fished_t[1],fished_t[length(fished_t)],1)
-fished_years <- format(yeardec2date(date2yeardec(timemin.date) + (fished_index - timemin)),"%Y")
-res$refLev <- list()
-temp1 <- aggregate(res$pop$SSB, 
-                           by = list(years = format(res$pop$dates, "%Y")), 
-                                     FUN = mean, na.rm=TRUE) 
-temp2 <- aggregate(resf0$pop$SSB, 
-                   by = list(years = format(res$pop$dates, "%Y")), 
-                   FUN = mean, na.rm=TRUE) 
-## SPR
-res$refLev$years <- fished_years
-res$refLev$SPR <- temp1$x[temp1$years %in% as.numeric(fished_years)] / 
-  temp2$x[temp1$years %in% as.numeric(fished_years)] 
-## SPM refs
-res$refLev$Bdmsy <- Bdmsy
-res$refLev$msyd <- msyd
-res$refLev$Fdmsy <- Fdmsy
-## yearly harvest rate and biomass
-temp <- aggregate(list(bio = res$pop$B), by=list(years = format(res$pop$dates,"%Y")), mean, na.rm=TRUE)
-bioYear <- temp$bio[temp$years %in% as.numeric(fished_years)]
-if(any(!is.na(as.numeric(harvest_rate)))){
-  temp <- aggregate(list(x = as.numeric(harvest_rate)), 
-                    by=list(year = floor(fished_t)), mean, na.rm=TRUE)
-  harvest_rateYear <- temp$x
-}
-
-## Production curve
-bioPlot <- spmPlot(c(res$pop$B[1], Kest,  rest, nest))
-Prod <- (rest / (nest - 1)) * bioPlot * (1 - (bioPlot / Kest)^(nest-1))
-
 # Export data -------------------------------------------------------------
 
     ## for simulation of population without exploitation, necessary to make the lfq export optional:
@@ -680,6 +648,41 @@ Prod <- (rest / (nest - 1)) * bioPlot * (1 - (bioPlot / Kest)^(nest-1))
             })
         )
     }
+
+
+## Saving reference levels
+fished_dates <- res$lfqbin$dates ## yeardec2date(date2yeardec(timemin.date) + (fished_t - timemin))
+## fished_index <- seq(fished_t[1],fished_t[length(fished_t)],1)
+fished_years <- unique(format(fished_dates, "%Y")) ## format(yeardec2date(date2yeardec(timemin.date) + (fished_index - timemin)),"%Y")
+res$refLev <- list()
+temp1 <- aggregate(res$pop$SSB, 
+                   by = list(years = format(res$pop$dates, "%Y")), 
+                   FUN = mean, na.rm=TRUE) 
+temp2 <- aggregate(resf0$pop$SSB, 
+                   by = list(years = format(res$pop$dates, "%Y")), 
+                   FUN = mean, na.rm=TRUE) 
+## SPR
+res$refLev$years <- fished_years
+res$refLev$SPR <- temp1$x[temp1$years %in% as.numeric(fished_years)] / 
+  temp2$x[temp1$years %in% as.numeric(fished_years)] 
+## SPM refs
+res$refLev$Bdmsy <- Bdmsy
+res$refLev$msyd <- msyd
+res$refLev$Fdmsy <- Fdmsy
+## yearly harvest rate and biomass
+temp <- aggregate(list(bio = res$pop$B), by=list(years = format(res$pop$dates,"%Y")), mean, na.rm=TRUE)
+bioYear <- temp$bio[temp$years %in% as.numeric(fished_years)]
+if(any(!is.na(as.numeric(harvest_rate)))){
+  temp <- aggregate(list(x = as.numeric(harvest_rate)), 
+                    by=list(year = floor(fished_t)), mean, na.rm=TRUE)
+  harvest_rateYear <- temp$x
+}
+temp <- unique(format(yeardec2date(date2yeardec(timemin.date) + (fished_t - timemin)),"%Y"))
+harvest_rateYear <- harvest_rateYear[temp %in% fished_years]
+
+## Production curve
+bioPlot <- spmPlot(c(res$pop$B[1], Kest,  rest, nest))
+Prod <- (rest / (nest - 1)) * bioPlot * (1 - (bioPlot / Kest)^(nest-1))
 
 
 ## LBIs
@@ -842,7 +845,7 @@ if(plot){
   segments(x0 = 0, y0 = msyd, x1 = Bdmsy, y1 = msyd, col = "darkred", lty=3, lwd=2)
   segments(x0 = Bdmsy, y0 = 0, x1 = Bdmsy, y1 = msyd, col = "darkred", lty=3, lwd=2)
   
-  ## growth curve?
+  ## growth curve
   Lplot <- seq(0,Linf.mu+10,0.1)
   suppressWarnings(agePlot <- TropFishR::VBGF(res$growthpars[1:5], L = Lplot))
   ages <- unlist(lapply(indsSamp, function(x) x[["A"]]))
