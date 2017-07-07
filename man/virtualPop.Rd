@@ -6,15 +6,15 @@
 \usage{
 virtualPop(tincr = 1/12, K.mu = 0.5, K.cv = 0.1, Linf.mu = 80,
   Linf.cv = 0.1, t0 = -0.03, ts = 0, C = 0.85, LWa = 0.01, LWb = 3,
-  Lmat.f = 40, wmat.f = 7, Lmat.m = 35, wmat.m = 8, rmaxBH = 1000,
-  betaBH = 1, srr.cv = 0.1, repro_wt = c(0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
-  0), M = 0.7, Etf = 500, qtf = 0.001, harvest_rate = NaN,
-  gear_types = "trawl", L50 = 0.25 * Linf.mu, wqs = L50 * 0.2,
-  sel_list = list(mesh_size = 100, mesh_size1 = 60, select_dist = "lognormal",
-  select_p1 = 3, select_p2 = 0.5), bin.size = 1, timemin = 0,
-  timemax = 25, timemin.date = as.Date("1980-01-01"), N0 = 1000,
-  fished_t = seq(17, 25, tincr), lfqFrac = 1, progressBar = TRUE,
-  plot = TRUE)
+  Lmat.f = 0.5 * Linf.mu, wmat.f = Lmat.f * 0.2, Lmat.m = 0.45 * Linf.mu,
+  wmat.m = Lmat.m * 0.15, rmaxBH = 1000, betaBH = 1, srr.cv = 0.1,
+  repro_wt = c(0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0), M = 0.7, Etf = 500,
+  qtf = 0.001, harvest_rate = NaN, gear_types = "trawl", L50 = 0.25 *
+  Linf.mu, wqs = L50 * 0.2, sel_list = list(mesh_size = 100, mesh_size1 =
+  60, select_dist = "lognormal", select_p1 = 3, select_p2 = 0.5),
+  bin.size = 1, timemin = 0, timemax = 25,
+  timemin.date = as.Date("1980-01-01"), N0 = 1000, fished_t = seq(17, 25,
+  tincr), lfqFrac = 1, progressBar = TRUE, plot = TRUE)
 }
 \arguments{
 \item{tincr}{time increment for simulation (default = 1/12; i.e. 1 month)}

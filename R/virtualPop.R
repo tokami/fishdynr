@@ -207,10 +207,18 @@ plot = TRUE
         qmat <- as.matrix(qtf)
     }
 
-    ## If no harvest_rate provided assuming that effort * catchability = fishing mortality
-    if(is.na(harvest_rate) | is.nan(harvest_rate)){
-        harvest_rate <- Emat * qmat
+  ## If no harvest_rate provided assuming that effort * catchability = fishing mortality
+  if(!is.na(harvest_rate) & !is.nan(harvest_rate)){
+    if(length(as.numeric(harvest_rate))==1){
+      harvest_rate <- rep(harvest_rate, length(fished_t))
+    }else{
+      harvest_rate <- matrix(rep(harvest_rate, each = length(fished_t)), 
+                             ncol = length(harvest_rate), nrow = length(fished=fished_t))
     }
+    }else{
+      harvest_rate <- Emat * qmat
+    }
+
 
     selfunc <- function(Lt, fleetNo){
         if(is.na(fleetNo)){
@@ -720,7 +728,7 @@ Lmat <- mean(c(Lmat.f,Lmat.m))
 Lc <- L50   ## check again with gillnet selectivity, then ICES formula
 res$refLev$Lc <- Lc
 ## alternatively: 50% of mode
-modes <- unlist(lapply(c_list, function(x) midLengths[x = max(x, na.rm=TRUE)]))
+modes <- unlist(lapply(c_list, function(x) midLengths[x == max(x, na.rm=TRUE)]))
 Lcalt <- vector('numeric',length(dates))
 for(i in 1:length(dates)){
   temp <- as.numeric(cumSum_perc[[i]][modes[i]])
@@ -853,7 +861,6 @@ if(plot){
        xlab="SSB", ylab ="Recruits",
        main = "Stock recruitment relationship",
        lwd=2, col='dodgerblue2',ylim = c(0,max(n_recruits)*1.2))
-  
   
   ## Legend
   par(mar=c(0,0,0,0))
