@@ -35,6 +35,7 @@
 #' @param lfqFrac fraction of fished stock that are sampled for length frequency data (default = 0.1).
 #' @param progressBar Logical. Should progress bar be shown in console (Default=TRUE)
 #' @param plot Logical. Should the standard plots be printed (Default=TRUE)
+#' @param seed integer; indicating the seed for set.seed()
 #'
 #' @description See \code{\link[fishdynr]{dt_growth_soVB}} for information on growth function.
 #' The model creates variation in growth based on a mean phi prime value for the population,
@@ -177,7 +178,8 @@ N0 = 1000,
 fished_t = seq(17,25,tincr),
 lfqFrac = 1,
 progressBar = TRUE,
-plot = TRUE
+plot = TRUE,
+seed = NULL
 ){
 
   ## Fishing mortality - effort - catchability
@@ -364,7 +366,7 @@ reproduce.inds <- function(inds, seed, save = FALSE){
             id = seq(lastID+1, length.out=n.recruits)
         )
         ## express genes in recruits
-        offspring <- express.inds(offspring, seed = seed + 4)
+        offspring <- express.inds(offspring, seed = seed+10)
         ##combine all individuals
         inds <- rbind(inds, offspring)
     }
@@ -474,14 +476,20 @@ spmPlot <- function(pars){
 }
 
 
-# run model ---------------------------------------------------------------
+    ## run model ---------------------------------------------------------------
+
+    ## seed values
+    if(is.null(seed) || is.null(seed)){
+        seed <- floor(runif(1,1,1000))
+    }
+    seed2 <- seed + floor(runif(1,1,100))
 
 # Initial population
 lastID <- 0
 inds <- make.inds(
   id=seq(N0)
 )
-inds <- express.inds(inds = inds, seed = 123)
+inds <- express.inds(inds = inds, seed = seed)
 
 ## results object
 res <- list()
@@ -501,7 +509,7 @@ lastID <- 0
 indsf0 <- make.inds(
   id=seq(N0)
 )
-indsf0 <- express.inds(inds = indsf0, seed = 123)
+indsf0 <- express.inds(inds = indsf0, seed = seed)
 ## results object 
 resf0 <- list()
 resf0$pop <- list(
@@ -542,8 +550,8 @@ for(j in seq(timeseq)){
 	# population processes
 	inds <- grow.inds(inds)
 	inds <- mature.inds(inds)
-	inds <- reproduce.inds(inds = inds, seed = j)
-	inds <- death.inds(inds, seed = j)
+	inds <- reproduce.inds(inds = inds, seed = seed+11+j)
+	inds <- death.inds(inds, seed = seed2+j)
 	## sample lfq data
 	if(lfqSamp){
 	  samp <- try(sample(seq(inds$L), ceiling(sum(inds$Fd)*lfqFrac), prob = inds$Fd), silent = TRUE)
@@ -564,8 +572,8 @@ for(j in seq(timeseq)){
 	# population processes
 	indsf0 <- grow.inds(indsf0)
 	indsf0 <- mature.inds(indsf0)
-	indsf0 <- reproduce.inds(inds = indsf0, seed = j, save = TRUE)
-	indsf0 <- death.inds(indsf0, seed = j, f0 = TRUE)
+	indsf0 <- reproduce.inds(inds = indsf0, seed = seed+11+j, save = TRUE)
+	indsf0 <- death.inds(indsf0, seed = seed2+j, f0 = TRUE)
 	indsf0 <- remove.inds(indsf0)
 	
 	# update results
