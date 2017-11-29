@@ -179,9 +179,10 @@ fished_t = seq(17,25,tincr),
 lfqFrac = 1,
 progressBar = TRUE,
 plot = TRUE,
-seed = NULL
-){
-
+seed = NULL,
+modpath = NULL,
+iteration = 1)
+{
   ## Fishing mortality - effort - catchability
   ## if E == single value, assuming one fleet and same effort for all fished years
   if(length(as.numeric(Etf))==1){
@@ -201,7 +202,7 @@ seed = NULL
     }
     if(class(qtf) == "matrix"){
         if(dim(qtf)[1] != dim(Emat)[1]){
-            qmat <- matrix(rep(qft[1,], dim(Emat)[1]),ncol=dim(qft)[2],byrow=TRUE)
+            qmat <- matrix(rep(qtf[1,], dim(Emat)[1]),ncol=dim(qtf)[2],byrow=TRUE) # qft -> qtf?
         }else{
             qmat <- qtf
         }
@@ -268,7 +269,6 @@ names(lfq) <- timeseq
 indsSamp <- vector(mode="list", length(timeseq))
 names(indsSamp) <- timeseq
 
-
 # Estimate tmaxrecr
 tmaxrecr <- (which.max(repro_wt)-1)*tincr
 
@@ -305,6 +305,18 @@ make.inds <- function(
   )
   lastID <<- max(inds$id)
   return(inds)
+}
+
+## Iterations
+## adding number of iterations of data to generate and directory to save generated data
+if(is.null(modpath) & length(iteration) > 1)
+  stop("must specify path (modpath) to save simulation iterations")
+if(is.null(modpath))
+  iteration <- 1
+for (iter in iteration) {
+  if (is.null(modpath) == FALSE) {
+    iterpath <- file.path(modpath, iter)
+    dir.create(iterpath, showWarnings = FALSE)
 }
 
 express.inds <- function(inds, seed){
@@ -359,6 +371,7 @@ reproduce.inds <- function(inds, seed, save = FALSE){
         seed5 <- seed + 5
         set.seed(seed5)
         n.recruits <- n.recruits * rlnorm(1, 0, sdlog = srr.cv)
+        # RecDev <- rnorm(tyears, mean = -(SigmaR ^ 2) / 2, sd = SigmaR)
         ## save SSB + n.recruits for stock recruitment plot
         if(save) stockRec <<- rbind(stockRec, data.frame(SSB = SSB, recruits = n.recruits))
         ## make recruits
@@ -822,14 +835,14 @@ if(plot){
   layout(matrix(c(1,2,3,4,5,6,7,7), ncol=2, byrow=TRUE), heights=c(4,4,4,1))
   par(mar=c(3,4,3,2))
   ## Numbers
-  with(res$pop, plot(dates, N, type='l', lwd=2, 
+  with(res$pop, plot(dates, N, type='l', lwd=2,
                      xlab="",ylab="Numbers",
                      main = "Population trajectory",
                      ylim=c(0,max(resf0$pop$N,na.rm=TRUE))))
   with(resf0$pop, lines(dates, N, col='dodgerblue2', lwd=2))
   points(res$pop$dates[1], N0,pch=4, lwd=2, col='darkred')
   ## Biomass  + SSB
-  with(res$pop, plot(dates, B, type='l', lwd=2, 
+  with(res$pop, plot(dates, B, type='l', lwd=2,
                      xlab="",ylab="Biomass",
                      main = "Biomass trajectory",
                      ylim=c(0,max(resf0$pop$B,na.rm=TRUE))))
@@ -847,23 +860,23 @@ if(plot){
   abline(h = resf0$pop$K2,lwd=2, lty=3, col = 'darkred')
   with(resf0$pop, lines(dates, bioPlot, lwd=2, lty=1, col = 'darkred'))
   ## Production curve
-  plot(bioPlot, Prod, type='l', lwd=2, col = 'dodgerblue2', 
+  plot(bioPlot, Prod, type='l', lwd=2, col = 'dodgerblue2',
        main = "Production curve",
        xlab="Biomass",ylab="Surplus production", ylim = c(0,max(Prod,na.rm=TRUE)*1.1))
   segments(x0 = 0, y0 = msyd, x1 = Bdmsy, y1 = msyd, col = "darkred", lty=3, lwd=2)
   segments(x0 = Bdmsy, y0 = 0, x1 = Bdmsy, y1 = msyd, col = "darkred", lty=3, lwd=2)
-  
+
   ## growth curve
   Lplot <- seq(0,Linf.mu+10,0.1)
   suppressWarnings(agePlot <- TropFishR::VBGF(res$growthpars[1:5], L = Lplot))
   ages <- unlist(lapply(indsSamp, function(x) x[["A"]]))
   lengths <- unlist(lapply(indsSamp, function(x) x[["L"]]))
-  plot(ages, lengths, pch=16, 
+  plot(ages, lengths, pch=16,
        ylim=c(0,Linf.mu+30),
        main = "VBGF",col='dodgerblue2',
        ylab="Length", xlab = "Age")
   lines(agePlot, Lplot, col='darkred',lwd=2)
-  
+
   ## Stock recruitment relationship
   SSBplot <- seq(0,100,0.1)
   n_recruits <- srrBH(rmaxBH,betaBH,SSBplot)
@@ -872,18 +885,30 @@ if(plot){
        xlab="SSB", ylab ="Recruits",
        main = "Stock recruitment relationship",
        lwd=2, col='dodgerblue2',ylim = c(0,max(n_recruits)*1.2))
-  
+
   ## Legend
   par(mar=c(0,0,0,0))
   plot.new()
   legend("center", legend=c("fishing", "no fishing", "Reference levels"),
          ncol = 3,
-        col=c("black",'dodgerblue2', "darkred"), lwd=2, lty=1, bty='n', 
+        col=c("black",'dodgerblue2', "darkred"), lwd=2, lty=1, bty='n',
         x.intersp = 0.4, seg.len = 0.5,cex=1.1)
-  
+
   on.exit(par(mfrow=c(1,1), mar=c(5,4,4,2)))
 }
 
+
+{
+if (is.null(modpath) == FALSE)
+  saveRDS(res, file.path(iterpath, "True.rds"))
+if (is.null(modpath))
+  return(res)
+rm(res)
+rm(iterpath)
+}
+}
+if (is.null(modpath) == FALSE)
+  return(modpath)
 
 return(res)
 
