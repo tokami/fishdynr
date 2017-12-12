@@ -13,9 +13,12 @@
 #' @param wmat.f width between 25\% and 75\% quantiles for Lmat for females
 #' @param Lmat.m length at maturity for males(where 50\% of individuals are mature)
 #' @param wmat.m width between 25\% and 75\% quantiles for Lmat for males
+#' @param rec_dyn patterns for recruitment dynamics. Options include "BH" (Beverton-Holt), "Constant", and "AR" (autocorrelated recruitment)
 #' @param rmaxBH parameter for Beverton-Holt stock recruitment relationship (see \code{\link[fishdynr]{srrBH}})
 #' @param betaBH parameter for Beverton-Holt stock recruitment relationship (see \code{\link[fishdynr]{srrBH}})
 #' @param srr.cv coefficient of variation stock recruitment relationship
+#' @param SigmaR recruitment standard deviation- default: 0.737, the median across all fish species (Thorson et al. 2014). Used for generating recruitment deviates in the simulation
+#' @param rho changing the value of rho will add autocorrelation to the generated recruitment time series for a simulation study
 #' @param repro_wt weight of reproduction (vector of monthly reproduction weight)
 #' @param M natural mortality
 #' @param Etf  effort (E = F / q); single numeric, numeric vector for effort per year, or matrix for different fleets (columns) and different years (rows)
@@ -36,6 +39,8 @@
 #' @param progressBar Logical. Should progress bar be shown in console (Default=TRUE)
 #' @param plot Logical. Should the standard plots be printed (Default=TRUE)
 #' @param seed integer; indicating the seed for set.seed()
+#' @param modpath model path for saving simulated populations; can be set as NULL to run within R environment only without saving locally
+#' @param iteration vector of iterations of simulated data (default = 1, i.e. run only 1 iteration)
 #'
 #' @description See \code{\link[fishdynr]{dt_growth_soVB}} for information on growth function.
 #' The model creates variation in growth based on a mean phi prime value for the population,
@@ -55,6 +60,10 @@
 #'
 #' Pauly, D., Munro, J., 1984. Once more on the comparison of growth
 #' in fish and invertebrates. Fishbyte (Philippines).
+#' 
+#' Thorson, J.T., Jensen, O.P, and Zipkin, E.F. 2014. How variable is recruitment 
+#' for exploited marine fishes? A hierarchical model for testing life history theory. 
+#' Canadian Journal of Fisheries and Aquatic Sciences 71(7):973-983.
 #'
 #' @importFrom graphics hist
 #' @importFrom stats rlnorm runif weighted.mean
@@ -161,8 +170,11 @@ ts = 0, C = 0.85,
 LWa = 0.01, LWb = 3,
 Lmat.f = 0.5*Linf.mu, wmat.f = Lmat.f*0.2,
 Lmat.m = 0.45*Linf.mu, wmat.m = Lmat.m*0.15,
+rec_dyn = "BH",
 rmaxBH = 1000,
 betaBH = 1, srr.cv = 0.1,
+SigmaR = 0.737,
+rho = 0.43,
 repro_wt = c(0,0,0,1,0,0,0,0,0,0,0,0),
 M = 0.7,
 Etf = 500,
@@ -183,6 +195,7 @@ seed = NULL,
 modpath = NULL,
 iteration = 1)
 {
+
   ## Fishing mortality - effort - catchability
   ## if E == single value, assuming one fleet and same effort for all fished years
   if(length(as.numeric(Etf))==1){
@@ -282,8 +295,8 @@ date2yeardec <- function(date){as.POSIXlt(date)$year+1900 + (as.POSIXlt(date)$yd
 yeardec2date <- function(yeardec){as.Date(strptime(paste(yeardec%/%1, ceiling(yeardec%%1*365+1), sep="-"), format="%Y-%j"))}
 
 make.inds <- function(
-	id=NaN, A = 0, L = 0, W=NaN, sex = NaN, mat=0,
-	K = K.mu, Winf=NaN, Linf=NaN, phiprime=NaN,
+	id=NaN, A = 0, L = 0, W=NaN, sex = NaN, mat=0, 
+	R_t = NaN, K = K.mu, Winf=NaN, Linf=NaN, phiprime=NaN,
 	F=NaN, Z=NaN, Fd=0, alive=1
 ){
   inds <- data.frame(
@@ -294,6 +307,7 @@ make.inds <- function(
     sex = sex,
     Lmat=NaN,
     mat = mat,
+    R_t = R_t, # recruitment 
     K = K,
     Linf = Linf,
     Winf = Winf,
@@ -361,29 +375,85 @@ mature.inds <- function(inds){
 	return(inds)
 }
 
+## For constant recruitment
+seed5 <- seed + 5
+set.seed(seed5)
+RecDev <- rlnorm(1, -(SigmaR ^ 2) / 2, sdlog = SigmaR)
+
 reproduce.inds <- function(inds, seed, save = FALSE){
-	## reproduction can only occur of population contains >1 mature individual
+  ## reproduction can only occur of population contains >1 mature individual
+  if(rec_dyn == "BH"){  
     if(repro > 0 & sum(inds$mat) > 0){
-        ## calc. SSB
-        SSB <- sum(inds$W*inds$mat)
-        n.recruits <- ceiling(srrBH(rmaxBH, betaBH, SSB) * repro)
-        ## add noise to recruitment process
-        seed5 <- seed + 5
-        set.seed(seed5)
-        n.recruits <- n.recruits * rlnorm(1, 0, sdlog = srr.cv)
-        # RecDev <- rnorm(tyears, mean = -(SigmaR ^ 2) / 2, sd = SigmaR)
-        ## save SSB + n.recruits for stock recruitment plot
-        if(save) stockRec <<- rbind(stockRec, data.frame(SSB = SSB, recruits = n.recruits))
-        ## make recruits
-        offspring <- make.inds(
-            id = seq(lastID+1, length.out=n.recruits)
-        )
-        ## express genes in recruits
-        offspring <- express.inds(offspring, seed = seed+10)
-        ##combine all individuals
-        inds <- rbind(inds, offspring)
+      ## calc. SSB
+      SSB <- sum(inds$W*inds$mat)
+      n.recruits <- ceiling(srrBH(rmaxBH, betaBH, SSB) * repro)
+      ## add noise to recruitment process
+      seed5 <- seed + 5
+      set.seed(seed5)
+      n.recruits <- n.recruits * RecDev
+      ## save SSB + n.recruits for stock recruitment plot
+      if(save) stockRec <<- rbind(stockRec, data.frame(SSB = SSB, recruits = n.recruits))
+      ## make recruits
+      offspring <- make.inds(
+        id = seq(lastID+1, length.out= n.recruits)
+      )
+      inds$R_t <- RecDev
+      # express genes in recruits
+      offspring <- express.inds(offspring, seed = seed+10)
+      ##combine all individuals
+      inds <- rbind(inds, offspring)
     }
-    return(inds)
+  }
+  if(rec_dyn == "Constant"){
+    if(repro > 0 & sum(inds$mat) >0){
+      betaBH = 1
+      ## calculate biomass
+      SSB <- sum(inds$W * inds$mat)
+      n.recruits <- ceiling(srrBH(rmaxBH, betaBH, SSB) * repro)
+      ## 
+      ## add noise to recruitment process
+      seed5 <- seed + 5
+      set.seed(seed5)
+      n.recruits <- n.recruits * RecDev
+      ## save SSB + n.recruits for stock recruitment plot
+      if(save) stockRec <<- rbind(stockRec, data.frame(SSB = SSB, recruits = n.recruits))
+      ## make recruits
+      offspring <- make.inds(
+        id = seq(lastID+1, length.out=n.recruits)
+      )
+      set.seed(seed5)
+      inds$R_t <- RecDev
+      ## express genes in recruits
+      offspring <- express.inds(offspring, seed = seed+10)
+      ##combine all individuals
+      inds <- rbind(inds, offspring)
+    }
+  }
+  if(rec_dyn == "AR"){
+    if(repro > 0 & sum(inds$mat) >0){
+      ## calculate biomass
+      SSB <- sum(inds$W * inds$mat)
+      n.recruits <- ceiling(srrBH(rmaxBH, betaBH, SSB) * repro)
+      ## add noise to recruitment process
+      seed5 <- seed + 5
+      set.seed(seed5)
+      RecDev <- rlnorm(1, -(SigmaR ^ 2) / 2, sdlog = SigmaR)
+      RecDev_AR <- rho + sqrt(1 - rho ^ 2) * RecDev
+      n.recruits <- n.recruits * RecDev_AR
+      ## save SSB + n.recruits for stock recruitment plot
+      if(save) stockRec <<- rbind(stockRec, data.frame(SSB = SSB, recruits = n.recruits))
+      ## make recruits
+        offspring <- make.inds(
+          id = seq(lastID+1, length.out = n.recruits)
+                   )
+      # inds$R_t <- R_t
+      ## express genes in recruits
+      offspring <- express.inds(offspring, seed = seed+10)
+      ##combine all individuals
+      inds <- rbind(inds, offspring)
+    }
+  }
+  return(inds)
 }
 
 death.inds <- function(inds, seed, f0 = FALSE){
@@ -878,13 +948,34 @@ if(plot){
   lines(agePlot, Lplot, col='darkred',lwd=2)
 
   ## Stock recruitment relationship
-  SSBplot <- seq(0,100,0.1)
-  n_recruits <- srrBH(rmaxBH,betaBH,SSBplot)
-  n_recruits <- n_recruits * rlnorm(length(n_recruits),0, sdlog = srr.cv)
-  plot(SSBplot, n_recruits, type = "l",
-       xlab="SSB", ylab ="Recruits",
-       main = "Stock recruitment relationship",
-       lwd=2, col='dodgerblue2',ylim = c(0,max(n_recruits)*1.2))
+  if (rec_dyn == "BH") {
+    SSBplot <- seq(0,100,0.1)
+    n_recruits <- srrBH(rmaxBH,betaBH,SSBplot)
+    n_recruits <- n_recruits * RecDev
+    plot(SSBplot, n_recruits, type = "l",
+         xlab="SSB", ylab ="Recruits",
+        main = "Stock recruitment relationship",
+        lwd=2, col='dodgerblue2',ylim = c(0,max(n_recruits)*1.2))
+  }
+  if (rec_dyn == "Constant") {
+    SSBplot <- seq(0,100,0.1)
+    betaBH = 1
+    n_recruits <- srrBH(rmaxBH,betaBH,SSBplot)
+    n_recruits <- n_recruits * RecDev
+    plot(SSBplot, n_recruits, type = "l",
+         xlab= "SSB", ylab= "Recruits",
+         main= "Stock recruitment relationship",
+         lwd= 2, col='dodgerblue2', ylim= c(0,max(n_recruits)*1.2))
+  }
+  if(rec_dyn == "AR") {
+    SSBplot <- seq(0,100,0.1)
+    n_recruits <- srrBH(rmaxBH, betaBH, SSBplot)
+    n_recruits <- n_recruits * RecDev_AR
+    plot(SSBplot, n_recruits, type = "l",
+         xlab= "SSB", ylab= "Recruits",
+         main= "Stock recruitment relationship",
+         lwd= 2, col='dodgerblue2', ylim= c(0,max(n_recruits)*1.2))
+  }
 
   ## Legend
   par(mar=c(0,0,0,0))
