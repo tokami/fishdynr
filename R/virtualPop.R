@@ -376,8 +376,6 @@ mature.inds <- function(inds){
 }
 
 ## For constant recruitment
-seed5 <- seed + 5
-set.seed(seed5)
 RecDev <- rlnorm(1, -(SigmaR ^ 2) / 2, sdlog = SigmaR)
 
 reproduce.inds <- function(inds, seed, save = FALSE){
