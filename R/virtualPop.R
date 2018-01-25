@@ -1,5 +1,6 @@
 #' @title Virtual fish population
 #'
+#' @param burnin operating model burn-in period (default- 10 years)
 #' @param K.mu mean K (growth parameter from von Bertalanffy growth function)
 #' @param K.cv coefficient of variation on K
 #' @param Linf.mu mean Linf (infinite length parameter from von Bertalanffy growth function)
@@ -23,6 +24,11 @@
 #' @param M natural mortality
 #' @param Etf  effort (E = F / q); single numeric, numeric vector for effort per year, or matrix for different fleets (columns) and different years (rows)
 #' @param qtf catchability (default 0.001); single numeric, numeric vector for effort per year, or matrix for different fleets (columns)  and different years (rows)
+#' @param Fishscen patterns for fishing dynamics. Options include "None" (then uses harvest_rate, Etf, and qtf), "Constant", "Fish_down" (fishing down), "Two-way", and "Multi_peak". Depends on variables F_scen, F_high, F_low, and SigmaF 
+#' @param SigmaF fishing mortality standard deviation. Used for generating fishing mortality deviates in the simulation
+#' @param F_scen Some reference point (Fmsy, F40, etc) used to create different fishing scenarios
+#' @param F_high Upper bound of fishing mortality with F_scen used to create different fishing scenarios
+#' @param F_low Lower bound of fishing mortality with F_scen used to create different fishing scenarios
 #' @param harvest_rate Fishing mortality (i.e. 'F' = C/B); if NaN Etf and qtf are used to estimate the harvest_rate
 #' @param gear_types Character(s) defining the gear of the fishing fleet(s) (so far: either "trawl" or "gillnet")
 #' @param L50 minimum length of capture (in cm). Where selectivity equals 0.5. Assumes logistic ogive typical of trawl net selectivity.
@@ -162,6 +168,7 @@
 
 
 virtualPop <- function(
+burnin = 10,
 tincr = 1/12,
 K.mu = 0.5, K.cv = 0.1,
 Linf.mu = 80, Linf.cv = 0.1,
@@ -179,6 +186,11 @@ repro_wt = c(0,0,0,1,0,0,0,0,0,0,0,0),
 M = 0.7,
 Etf = 500,
 qtf = 0.001,
+Fishscen = "None",
+SigmaF = 0.2,
+F_scen = 0.5,
+F_high = 1,
+F_low = 0.01,
 harvest_rate = NaN,
 gear_types = "trawl",   # alternative: "gillnet"
 L50 = 0.25*Linf.mu,
@@ -197,71 +209,113 @@ iteration = 1)
 {
 
   ## Fishing mortality - effort - catchability
-  ## if E == single value, assuming one fleet and same effort for all fished years
-  if(length(as.numeric(Etf))==1){
-    Emat <- as.matrix(rep(Etf,length(fished_t)))
+  ## For constant fishing deviation
+  FDev <- rlnorm(1, 0, sdlog = SigmaF)
+
+  ## Different fishing scenarios
+  if(Fishscen == "Constant"){
+    harvest_rate <- c(rep(0, burnin/tincr), rep(F_scen, length(fished_t) - burnin/tincr))
+    ## add noise
+    set.seed(seed)
+    harvest_rate <- harvest_rate * FDev
   }
-  ## if E == matrix, rows = years and columns = fleets
-    
-    if(class(Etf) == "matrix"){
-      Emat <- Etf
-    }else if(length(Etf)>1){
-      Emat <- as.matrix(Etf)
-    }
-    
-    ## adapt q to Emat
-    if(length(qtf)==1){
-        qmat <- matrix(qtf, ncol=dim(Emat)[2], nrow=dim(Emat)[1])
-    }
-    if(class(qtf) == "matrix"){
-        if(dim(qtf)[1] != dim(Emat)[1]){
-            qmat <- matrix(rep(qtf[1,], dim(Emat)[1]),ncol=dim(qtf)[2],byrow=TRUE) # qft -> qtf?
-        }else{
-            qmat <- qtf
-        }
-    }else if(length(qtf)>1){
-        qmat <- as.matrix(qtf)
+  
+  if(Fishscen == "Fish_down"){
+    harvest_rate <- c(rep(0, burnin/tincr), seq(0, F_high, length.out = length(fished_t) - burnin/tincr))
+    ## add noise
+    set.seed(seed)
+    FDev <- rnorm(length(fished_t), -(SigmaF ^ 2)/2, sd = SigmaF)
+    harvest_rate <- harvest_rate * exp(FDev)
+  }
+
+  if(Fishscen == "Two_way"){
+    up <- seq(0, F_high, length.out = (length(fished_t)/2))
+    down <- seq(F_high, F_low, length.out = (length(fished_t)- burnin/tincr - length(up)))
+    harvest_rate <- c(rep(0, burnin/tincr), up, down)
+    ## add noise
+    set.seed(seed)
+    FDev <- rnorm(length(fished_t), -(SigmaF ^ 2)/2, sd = SigmaF)
+    harvest_rate <- harvest_rate * exp(FDev)
     }
 
-  ## If no harvest_rate provided assuming that effort * catchability = fishing mortality
-  if(!is.na(harvest_rate) & !is.nan(harvest_rate)){
-    if(length(as.numeric(harvest_rate))==1){
-      harvest_rate <- rep(harvest_rate, length(fished_t))
-    }else{
-      harvest_rate <- matrix(rep(harvest_rate, each = length(fished_t)), 
-                             ncol = length(harvest_rate), nrow = length(fished=fished_t))
-    }
-    }else{
-      harvest_rate <- Emat * qmat
-    }
+  if(Fishscen == "Multi_peak"){
+    up <- seq(0, F_high, length.out = (length(fished_t)/6))
+    down <- seq(F_high, F_low, length.out = (length(fished_t)/6))
+    up2 <- seq(F_low, F_high, length.out = (length(fished_t)/6))
+    down2 <- seq(F_high, F_low, length.out = length(fished_t)- burnin/tincr - length(up) - length(down) - length(up2))
+    harvest_rate <- c(rep(0, burnin/tincr), up, down, up2, down2)
+    ## add noise
+    set.seed(seed)
+    FDev <- rnorm(length(fished_t), -(SigmaF ^ 2)/2, sd = SigmaF)
+    harvest_rate <- harvest_rate * exp(FDev)
+  }
 
-
-    selfunc <- function(Lt, fleetNo){
-        if(is.na(fleetNo)){
-            gear_typesX <- gear_types
-            L50X <- L50
-            wqsX <- wqs
-            sel_listX <- sel_list
-        }else{
-            gear_typesX <- gear_types[fleetNo]
-        }
-        switch(gear_typesX,
-               trawl ={
-                   if(!is.na(fleetNo)){
-                       L50X <- L50[fleetNo]
-                       wqsX <- wqs[fleetNo]
-                   }
-                   pSel <- logisticSelect(Lt=Lt, L50=L50X, wqs=wqsX)},
-               gillnet={
-                   if(!is.na(fleetNo)){
-                       sel_listX <- sel_list[[fleet_No]]
-                   }
-                   pSel <- do.call(fishdynr::gillnet, c(list(Lt=Lt),sel_listX))
-               },
-               stop(paste("\n",gear_typesX,"not recognized, possible options are: \n","trawl \n","gillnet \n")))
-        return(pSel)
+    ## if E == single value, assuming one fleet and same effort for all fished years
+    if(length(as.numeric(Etf))==1){
+      Emat <- as.matrix(rep(Etf,length(fished_t)))
     }
-
+    ## if E == matrix, rows = years and columns = fleets
+      
+      if(class(Etf) == "matrix"){
+        Emat <- Etf
+      }else if(length(Etf)>1){
+        Emat <- as.matrix(Etf)
+      }
+      
+      ## adapt q to Emat
+      if(length(qtf)==1){
+          qmat <- matrix(qtf, ncol=dim(Emat)[2], nrow=dim(Emat)[1])
+      }
+      if(class(qtf) == "matrix"){
+          if(dim(qtf)[1] != dim(Emat)[1]){
+              qmat <- matrix(rep(qtf[1,], dim(Emat)[1]),ncol=dim(qtf)[2],byrow=TRUE) # qft -> qtf?
+          }else{
+              qmat <- qtf
+          }
+      }else if(length(qtf)>1){
+          qmat <- as.matrix(qtf)
+      }
+  if(Fishscen == "None"){
+    ## If no harvest_rate provided assuming that effort * catchability = fishing mortality
+    if(!is.na(harvest_rate) & !is.nan(harvest_rate)){
+      if(length(as.numeric(harvest_rate))==1){
+        harvest_rate <- rep(harvest_rate, length(fished_t))
+      }else{
+        harvest_rate <- matrix(rep(harvest_rate, each = length(fished_t)), 
+                               ncol = length(harvest_rate), nrow = length(fished=fished_t))
+      }
+      }else{
+        harvest_rate <- Emat * qmat
+      }
+  }
+  
+  
+      selfunc <- function(Lt, fleetNo){
+          if(is.na(fleetNo)){
+              gear_typesX <- gear_types
+              L50X <- L50
+              wqsX <- wqs
+              sel_listX <- sel_list
+          }else{
+              gear_typesX <- gear_types[fleetNo]
+          }
+          switch(gear_typesX,
+                 trawl ={
+                     if(!is.na(fleetNo)){
+                         L50X <- L50[fleetNo]
+                         wqsX <- wqs[fleetNo]
+                     }
+                     pSel <- logisticSelect(Lt=Lt, L50=L50X, wqs=wqsX)},
+                 gillnet={
+                     if(!is.na(fleetNo)){
+                         sel_listX <- sel_list[[fleet_No]]
+                     }
+                     pSel <- do.call(fishdynr::gillnet, c(list(Lt=Lt),sel_listX))
+                 },
+                 stop(paste("\n",gear_typesX,"not recognized, possible options are: \n","trawl \n","gillnet \n")))
+          return(pSel)
+      }
+      
     ## ## if multiple fleets target the same stock, the harvest rate of each fleet is scaled according to the combined harvest rate - this only works if all fleets would have the same gear!
     ## if(class(harvest_rate) == "matrix"){
     ##     multimat <- harvest_rate / rowSums(harvest_rate)
@@ -438,8 +492,8 @@ reproduce.inds <- function(inds, seed, save = FALSE){
       set.seed(seed5)
       RecDev <- rnorm(1, -(SigmaR ^ 2) / 2, SigmaR)
       RecDev_AR <- rho + sqrt(1 - rho ^ 2) * RecDev
-      R_t <- tincr * exp(RecDev_AR)
-      n.recruits <- n.recruits * RecDev_AR
+      R_t <- exp(RecDev_AR)
+      n.recruits <- n.recruits * R_t
       ## save SSB + n.recruits for stock recruitment plot
       if(save) stockRec <<- rbind(stockRec, data.frame(SSB = SSB, recruits = n.recruits))
       ## make recruits
@@ -951,7 +1005,7 @@ if(plot){
   if (rec_dyn == "BH") {
     # SSBplot <- seq(0,100,0.1)
     # n_recruitsplots <- srrBH(rmaxBH,betaBH,SSBplot)
-    plot(stockRec$SSB, stockRec$recruits, type = "p",
+    plot(stockRec$SSB/1e3, stockRec$recruits, type = "p",
          xlab="SSB", ylab ="Recruits",
         main = "Stock recruitment relationship",
         lwd = 2, col='dodgerblue2',ylim = c(0,max(stockRec$recruits)*1.2))
@@ -961,7 +1015,7 @@ if(plot){
     # betaBH = 1
     # n_recruits <- srrBH(rmaxBH,betaBH,SSBplot)
     # n_recruits <- n_recruits * RecDev
-    plot(stockRec$SSB, stockRec$recruits, type = "p",
+    plot(stockRec$SSB/1e3, stockRec$recruits, type = "p",
          xlab= "SSB", ylab= "Recruits",
          main= "Stock recruitment relationship",
          lwd= 2, col='dodgerblue2', ylim= c(0,max(stockRec$recruits)*1.2))
@@ -971,7 +1025,7 @@ if(plot){
     # n_recruits <- srrBH(rmaxBH, betaBH, SSBplot)
     # RecDev <- rlnorm(1, -(SigmaR ^ 2) / 2, sdlog = SigmaR)
     # n_recruits <- n_recruits * RecDev
-    plot(stockRec$SSB, stockRec$recruits, type = "p",
+    plot(stockRec$SSB/1e3, stockRec$recruits, type = "p",
          xlab= "SSB", ylab= "Recruits",
          main= "Stock recruitment relationship",
          lwd= 2, col='dodgerblue2', ylim= c(0,max(stockRec$recruits)*1.2))
