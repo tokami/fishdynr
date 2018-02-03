@@ -207,74 +207,86 @@ seed = NULL,
 modpath = NULL,
 iteration = 1)
 {
+  if(is.null(modpath) & length(iteration) > 1)
+    stop("must specify path (modpath) to save simulation iterations")
+  if(is.null(modpath)){
+    iteration <- 1
+    seed <- NULL}
+  for (iter in iteration) {
+    if (is.null(modpath) == FALSE) {
+      iterpath <- file.path(modpath, iter)
+      dir.create(iterpath, showWarnings = FALSE)
+      seed <- seed + iter
+    }
 
   ## Fishing mortality - effort - catchability
-  ## For constant fishing deviation
-  FDev <- rlnorm(1, 0, sdlog = SigmaF)
-
   ## Different fishing scenarios
-  if(Fishscen == "Constant"){
-    harvest_rate <- c(rep(0, burnin/tincr), rep(F_scen, length(fished_t) - burnin/tincr))
-    ## add noise
-    set.seed(seed)
-    harvest_rate <- harvest_rate * FDev
+  fishing.scenario <- function(Fishscen, seed){
+    if(Fishscen == "Constant"){
+      harvest_rate <- c(rep(0, burnin/tincr), rep(F_scen, length(fished_t) - burnin/tincr))
+      ## add noise
+      set.seed(seed)
+      FDev <- rlnorm(length(fished_t), 0, sdlog = SigmaF)
+      harvest_rate <- harvest_rate * FDev
+    }
+    
+    if(Fishscen == "Fish_down"){
+      harvest_rate <- c(rep(0, burnin/tincr), seq(0, F_high, length.out = length(fished_t) - burnin/tincr))
+      ## add noise
+      set.seed(seed)
+      FDev <- rnorm(length(fished_t), -(SigmaF ^ 2)/2, sd = SigmaF)
+      harvest_rate <- harvest_rate * exp(FDev)
+    }
+    
+    if(Fishscen == "Two_way"){
+      up <- seq(0, F_high, length.out = (length(fished_t)/2))
+      down <- seq(F_high, F_low, length.out = (length(fished_t)- burnin/tincr - length(up)))
+      harvest_rate <- c(rep(0, burnin/tincr), up, down)
+      ## add noise
+      set.seed(seed)
+      FDev <- rnorm(length(fished_t), -(SigmaF ^ 2)/2, sd = SigmaF)
+      harvest_rate <- harvest_rate * exp(FDev)
+    }
+    
+    if(Fishscen == "Multi_peak"){
+      up <- seq(0, F_high, length.out = (length(fished_t)/6))
+      down <- seq(F_high, F_low, length.out = (length(fished_t)/6))
+      up2 <- seq(F_low, F_high, length.out = (length(fished_t)/6))
+      down2 <- seq(F_high, F_low, length.out = length(fished_t)- burnin/tincr - length(up) - length(down) - length(up2))
+      harvest_rate <- c(rep(0, burnin/tincr), up, down, up2, down2)
+      ## add noise
+      set.seed(seed)
+      FDev <- rnorm(length(fished_t), -(SigmaF ^ 2)/2, sd = SigmaF)
+      harvest_rate <- harvest_rate * exp(FDev)
+    }
+    return(harvest_rate)
   }
   
-  if(Fishscen == "Fish_down"){
-    harvest_rate <- c(rep(0, burnin/tincr), seq(0, F_high, length.out = length(fished_t) - burnin/tincr))
-    ## add noise
-    set.seed(seed)
-    FDev <- rnorm(length(fished_t), -(SigmaF ^ 2)/2, sd = SigmaF)
-    harvest_rate <- harvest_rate * exp(FDev)
+  ## if E == single value, assuming one fleet and same effort for all fished years
+  if(length(as.numeric(Etf))==1){
+    Emat <- as.matrix(rep(Etf,length(fished_t)))
   }
-
-  if(Fishscen == "Two_way"){
-    up <- seq(0, F_high, length.out = (length(fished_t)/2))
-    down <- seq(F_high, F_low, length.out = (length(fished_t)- burnin/tincr - length(up)))
-    harvest_rate <- c(rep(0, burnin/tincr), up, down)
-    ## add noise
-    set.seed(seed)
-    FDev <- rnorm(length(fished_t), -(SigmaF ^ 2)/2, sd = SigmaF)
-    harvest_rate <- harvest_rate * exp(FDev)
-    }
-
-  if(Fishscen == "Multi_peak"){
-    up <- seq(0, F_high, length.out = (length(fished_t)/6))
-    down <- seq(F_high, F_low, length.out = (length(fished_t)/6))
-    up2 <- seq(F_low, F_high, length.out = (length(fished_t)/6))
-    down2 <- seq(F_high, F_low, length.out = length(fished_t)- burnin/tincr - length(up) - length(down) - length(up2))
-    harvest_rate <- c(rep(0, burnin/tincr), up, down, up2, down2)
-    ## add noise
-    set.seed(seed)
-    FDev <- rnorm(length(fished_t), -(SigmaF ^ 2)/2, sd = SigmaF)
-    harvest_rate <- harvest_rate * exp(FDev)
+  ## if E == matrix, rows = years and columns = fleets
+  
+  if(class(Etf) == "matrix"){
+    Emat <- Etf
+  }else if(length(Etf)>1){
+    Emat <- as.matrix(Etf)
   }
-
-    ## if E == single value, assuming one fleet and same effort for all fished years
-    if(length(as.numeric(Etf))==1){
-      Emat <- as.matrix(rep(Etf,length(fished_t)))
+  
+  ## adapt q to Emat
+  if(length(qtf)==1){
+    qmat <- matrix(qtf, ncol=dim(Emat)[2], nrow=dim(Emat)[1])
+  }
+  if(class(qtf) == "matrix"){
+    if(dim(qtf)[1] != dim(Emat)[1]){
+      qmat <- matrix(rep(qtf[1,], dim(Emat)[1]),ncol=dim(qtf)[2],byrow=TRUE) # qft -> qtf?
+    }else{
+      qmat <- qtf
     }
-    ## if E == matrix, rows = years and columns = fleets
-      
-      if(class(Etf) == "matrix"){
-        Emat <- Etf
-      }else if(length(Etf)>1){
-        Emat <- as.matrix(Etf)
-      }
-      
-      ## adapt q to Emat
-      if(length(qtf)==1){
-          qmat <- matrix(qtf, ncol=dim(Emat)[2], nrow=dim(Emat)[1])
-      }
-      if(class(qtf) == "matrix"){
-          if(dim(qtf)[1] != dim(Emat)[1]){
-              qmat <- matrix(rep(qtf[1,], dim(Emat)[1]),ncol=dim(qtf)[2],byrow=TRUE) # qft -> qtf?
-          }else{
-              qmat <- qtf
-          }
-      }else if(length(qtf)>1){
-          qmat <- as.matrix(qtf)
-      }
+  }else if(length(qtf)>1){
+    qmat <- as.matrix(qtf)
+  }
   if(Fishscen == "None"){
     ## If no harvest_rate provided assuming that effort * catchability = fishing mortality
     if(!is.na(harvest_rate) & !is.nan(harvest_rate)){
@@ -284,63 +296,64 @@ iteration = 1)
         harvest_rate <- matrix(rep(harvest_rate, each = length(fished_t)), 
                                ncol = length(harvest_rate), nrow = length(fished=fished_t))
       }
-      }else{
-        harvest_rate <- Emat * qmat
-      }
+    }else{
+      harvest_rate <- Emat * qmat
+    }
   }
   
+  harvest_rate <- fishing.scenario(Fishscen, seed) 
   
-      selfunc <- function(Lt, fleetNo){
-          if(is.na(fleetNo)){
-              gear_typesX <- gear_types
-              L50X <- L50
-              wqsX <- wqs
-              sel_listX <- sel_list
-          }else{
-              gear_typesX <- gear_types[fleetNo]
-          }
-          switch(gear_typesX,
-                 trawl ={
-                     if(!is.na(fleetNo)){
-                         L50X <- L50[fleetNo]
-                         wqsX <- wqs[fleetNo]
-                     }
-                     pSel <- logisticSelect(Lt=Lt, L50=L50X, wqs=wqsX)},
-                 gillnet={
-                     if(!is.na(fleetNo)){
-                         sel_listX <- sel_list[[fleet_No]]
-                     }
-                     pSel <- do.call(fishdynr::gillnet, c(list(Lt=Lt),sel_listX))
-                 },
-                 stop(paste("\n",gear_typesX,"not recognized, possible options are: \n","trawl \n","gillnet \n")))
-          return(pSel)
-      }
-      
-    ## ## if multiple fleets target the same stock, the harvest rate of each fleet is scaled according to the combined harvest rate - this only works if all fleets would have the same gear!
-    ## if(class(harvest_rate) == "matrix"){
-    ##     multimat <- harvest_rate / rowSums(harvest_rate)
-    ##     harvest_rate <- rowSums(harvest_rate * multimat)
-    ##    }
-
-# times
-timeseq = seq(from=timemin, to=timemax, by=tincr)
-if(!zapsmall(1/tincr) == length(repro_wt)) stop("length of repro_wt must equal the number of tincr in one year")
-repro_wt <- repro_wt/sum(repro_wt)
-repro_t <- rep(repro_wt, length=length(timeseq))
-# repro_t <- seq(timemin+repro_toy, timemax+repro_toy, by=1)
-
-# make empty lfq object
-lfq <- vector(mode="list", length(timeseq))
-names(lfq) <- timeseq
-
-indsSamp <- vector(mode="list", length(timeseq))
-names(indsSamp) <- timeseq
-
-# Estimate tmaxrecr
-tmaxrecr <- (which.max(repro_wt)-1)*tincr
-
-# mean phiprime
-phiprime.mu = log10(K.mu) + 2*log10(Linf.mu)
+  selfunc <- function(Lt, fleetNo){
+    if(is.na(fleetNo)){
+      gear_typesX <- gear_types
+      L50X <- L50
+      wqsX <- wqs
+      sel_listX <- sel_list
+    }else{
+      gear_typesX <- gear_types[fleetNo]
+    }
+    switch(gear_typesX,
+           trawl ={
+             if(!is.na(fleetNo)){
+               L50X <- L50[fleetNo]
+               wqsX <- wqs[fleetNo]
+             }
+             pSel <- logisticSelect(Lt=Lt, L50=L50X, wqs=wqsX)},
+           gillnet={
+             if(!is.na(fleetNo)){
+               sel_listX <- sel_list[[fleet_No]]
+             }
+             pSel <- do.call(fishdynr::gillnet, c(list(Lt=Lt),sel_listX))
+           },
+           stop(paste("\n",gear_typesX,"not recognized, possible options are: \n","trawl \n","gillnet \n")))
+    return(pSel)
+  }
+  
+  ## ## if multiple fleets target the same stock, the harvest rate of each fleet is scaled according to the combined harvest rate - this only works if all fleets would have the same gear!
+  ## if(class(harvest_rate) == "matrix"){
+  ##     multimat <- harvest_rate / rowSums(harvest_rate)
+  ##     harvest_rate <- rowSums(harvest_rate * multimat)
+  ##    }
+  
+  # times
+  timeseq = seq(from=timemin, to=timemax, by=tincr)
+  if(!zapsmall(1/tincr) == length(repro_wt)) stop("length of repro_wt must equal the number of tincr in one year")
+  repro_wt <- repro_wt/sum(repro_wt)
+  repro_t <- rep(repro_wt, length=length(timeseq))
+  # repro_t <- seq(timemin+repro_toy, timemax+repro_toy, by=1)
+  
+  # make empty lfq object
+  lfq <- vector(mode="list", length(timeseq))
+  names(lfq) <- timeseq
+  
+  indsSamp <- vector(mode="list", length(timeseq))
+  names(indsSamp) <- timeseq
+  
+  # Estimate tmaxrecr
+  tmaxrecr <- (which.max(repro_wt)-1)*tincr
+  
+  # mean phiprime
+  phiprime.mu = log10(K.mu) + 2*log10(Linf.mu)
 
 
 
@@ -373,18 +386,6 @@ make.inds <- function(
   )
   lastID <<- max(inds$id)
   return(inds)
-}
-
-## Iterations
-## adding number of iterations of data to generate and directory to save generated data
-if(is.null(modpath) & length(iteration) > 1)
-  stop("must specify path (modpath) to save simulation iterations")
-if(is.null(modpath))
-  iteration <- 1
-for (iter in iteration) {
-  if (is.null(modpath) == FALSE) {
-    iterpath <- file.path(modpath, iter)
-    dir.create(iterpath, showWarnings = FALSE)
 }
 
 express.inds <- function(inds, seed){
