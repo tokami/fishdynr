@@ -449,17 +449,18 @@ virtualPop <- function(tincr = 1/12,
             return(rec)
     }
 
-    spmOpt <- function(x, B0){
+    spmOpt <- function(x, B){
       K = x[1]
       r = x[2]
       n = x[3]
-      Bthat <- rep(NA, length(resf0$pop$B))
-      Bthat[1] <- B0
+      Bthat <- rep(NA, length(B))
+      Bthat[1] <- B[1]
       for(i in 2:length(Bthat)){
         Bthat[i] <- Bthat[i-1] + ((r / (n - 1)) * Bthat[i-1] * (1 - (Bthat[i-1] / K)^(n-1)))*tincr
       }
-      sum((resf0$pop$B - Bthat)^2)
+      sum((B - Bthat)^2)
     }
+
 
     spmPlot <- function(pars){
       B0 <- pars[1]
@@ -587,12 +588,13 @@ virtualPop <- function(tincr = 1/12,
 
 
     ## Estimate carrying capacity
-        ## Alternative way build into loop above
+    ## Alternative way build into loop above
     startyear  <- as.POSIXlt(timemin.date)
+    
     startyear$year <- startyear$year + spmYears
     year10 <- as.Date(startyear)
     cutoff <- which.min(abs(yeardec2date( date2yeardec(timemin.date) + (timeseq - timemin)) - year10))
-        cc_years <- seq(timeseq)[-(1:cutoff)]
+    cc_years <- seq(timeseq)[-(1:cutoff)]
 
     if(length(cc_years) > 3){
           mod <- lm(resf0$pop$B[cc_years] ~ 1)
@@ -601,14 +603,17 @@ virtualPop <- function(tincr = 1/12,
     if(length(cc_years) > 3){
       mod <- lm(resf0$pop$SSB[cc_years] ~ 1)
       resf0$pop$SSBf0 <- as.numeric(coefficients(mod))
-    }
-    if(length(cc_years) > 3){
-      mod <- lm(res$pop$SSB[cc_years] ~ 1)
-      res$pop$SSBf <- as.numeric(coefficients(mod))
+      res$pop$SSBf <- as.numeric(coefficients(mod))      
     }
 
-    ## estimate K, r, n 
-    resSPM <- optim(par = c(resf0$pop$K, 1, 2), fn = spmOpt, B0 = resf0$pop$B[1])
+
+    ## estimate K, r, n     
+    resSPM <- optim(par = c(resf0$pop$K, 1, 2), fn = spmOpt, B = resf0$pop$B, hessian = F, method = "BFGS")
+    resSPM <- optim(par = resSPM$par, fn = spmOpt, B = resf0$pop$B, hessian = F, method = "BFGS")
+    resSPM <- optim(par = resSPM$par, fn = spmOpt, B = resf0$pop$B, hessian = F, method = "CG")
+    ## alternatively SANN but takes longer
+    
+
     Kest <- resSPM$par[1]
     rest <- resSPM$par[2]
     nest <- resSPM$par[3]
