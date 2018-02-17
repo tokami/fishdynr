@@ -663,7 +663,11 @@ virtualPop <- function(tincr = 1/12,
         }
 
 
+
+
+    
     ## Saving reference levels
+    ##--------------------------------------------------------------------------------------------------    
     fished_dates <- res$lfqbin$dates ## yeardec2date(date2yeardec(timemin.date) + (fished_t - timemin))
     ## fished_index <- seq(fished_t[1],fished_t[length(fished_t)],1)
     fished_years <- unique(format(fished_dates, "%Y")) ## format(yeardec2date(date2yeardec(timemin.date) + (fished_index - timemin)),"%Y")
@@ -673,8 +677,13 @@ virtualPop <- function(tincr = 1/12,
                        FUN = mean, na.rm=TRUE) 
     temp2 <- aggregate(resf0$pop$SSB, 
                        by = list(years = format(res$pop$dates, "%Y")), 
-                       FUN = mean, na.rm=TRUE) 
+                       FUN = mean, na.rm=TRUE)
+
+
+
+    
     ## SPR
+    ##--------------------------------------------------------------------------------------------------    
     res$refLev$years <- fished_years
     res$refLev$SPR <- temp1$x[temp1$years %in% as.numeric(fished_years)] / 
       temp2$x[temp1$years %in% as.numeric(fished_years)] 
@@ -698,7 +707,9 @@ virtualPop <- function(tincr = 1/12,
     Prod <- (rest / (nest - 1)) * bioPlot * (1 - (bioPlot / Kest)^(nest-1))
 
 
-    ## LBIs
+
+    
+    ## for ypr and LBIs
     ## aggregate lfq data per year
     c_sum <- with(res$lfqbin,by(t(catch), format(dates, "%Y"), FUN = colSums))
     c_list <- lapply(as.list(c_sum), c)
@@ -711,6 +722,61 @@ virtualPop <- function(tincr = 1/12,
       cumSum_perc[[i]] <- cumSum[[i]] / sum(c_list[[i]])
     }
 
+
+   
+   
+    ## YPR
+    ##--------------------------------------------------------------------------------------------------
+    yprList <- vector("list", length(c_list))
+    for(i in 1:length(c_list)){  ## loop through years
+
+        lfqi <- structure(list(dates = dates[i],
+                    midLengths = midLengths,
+                    catch = as.matrix(c_list[[i]])),
+                    class = "lfq")
+
+        lfqi <- lfqModify(lfqi, vectorise_catch = TRUE)  ## only to remove 0s catches of small fish (for Lr)
+        lfqi$Lr <- min(lfqi$midLengths)
+        lfqi$Lc <- L50
+        lfqi <- c(lfqi,
+                  Linf = Linf.mu,
+                  K = K.mu,
+                  t0 = 0,
+                  C = C,
+                  ts = ts,
+                  t_anchor = weighted.mean(date2yeardec(as.Date(
+                            paste("2015",which(repro_wt != 0),"15",sep="-"))) %% 1,
+                            ## 2015 only as example year to get the decimial of spawning months
+                            w = repro_wt[which(repro_wt != 0)]),  ## weighted mean of t_anchor
+                  M = M,
+                  a = LWa,
+                  b = LWb)
+        class(lfqi) <- "lfq"
+
+        slist <- list(selecType = 'trawl_ogive',    ## this should be flexible at some point
+                      L50 = L50,
+                      L75 = L50 + (wqs/2))
+        
+        resi <- predict_mod(param = lfqi,
+                           type = "ypr",
+                           FM_change = seq(0,3,0.01),
+##                           Lc_change = L50,
+                           s_list = slist,
+                           plot = FALSE, hide.progressbar = TRUE)
+
+        indi <- names(resi$df_Es) %in% c("F01","Fmax","F05")
+        tmp <- resi$df_Es[indi]
+        if(!"F05" %in% names(resi$df_Es)){
+            tmp <- unlist(c(tmp, F05 = NA))
+        }
+        yprList[[i]] <- tmp
+    }
+    yprRes <- do.call(rbind, yprList)
+
+
+    
+    ## LBIs
+    ##--------------------------------------------------------------------------------------------------
     ## mean length of largest 5% (/Linf >.8)
     numb <- lapply(c_list, function(x) x[rev(order(midLengths))])    # from largest starting
     midLengthsRev <- midLengths[rev(order(midLengths))]
@@ -767,6 +833,9 @@ virtualPop <- function(tincr = 1/12,
     Lmaxy <- unlist(lapply(bio_list, function(x) midLengths[x == max(x, na.rm = TRUE)]))
     res$refLev$Lmaxy <- as.numeric(Lmaxy)
 
+
+    
+    ##--------------------------------------------------------------------------------------------------
     res$refLev$states <- data.frame("Lmax5/Linf" = round(Lmax5/Linf.mu,2),
                                     "L95/Linf" = round(L95/Linf.mu,2),
                                     "Pmega" = round(Pmega,2),
@@ -777,7 +846,11 @@ virtualPop <- function(tincr = 1/12,
                                     "Lmean/LFeM" = round(Lmean/LFeM,2),
                                     "SPR" = round(res$refLev$SPR,2),
                                     "F/Fmsy" = round(harvest_rateYear/Fdmsy,2),
-                                    "B/Bmsy" = round(bioYear/Bdmsy,2))
+                                    "B/Bmsy" = round(bioYear/Bdmsy,2),
+                                    "F/F01" = round(harvest_rateYear/yprRes[,1],2),
+                                    "F/Fmax" = round(harvest_rateYear/yprRes[,2],2),
+                                    "F/F05" = round(harvest_rateYear/yprRes[,3],2))
+    
     res$refLev$statesRefPoint <- data.frame("Lmax5/Linf" = ">0.8",
                                             "L95/Linf" = ">0.8",
                                             "Pmega" = ">0.3",
@@ -788,9 +861,12 @@ virtualPop <- function(tincr = 1/12,
                                             "Lmean/LFeM" = ">=1",
                                             "SPR" = ">0.3",
                                             "F/Fmsy" = "<=1",
-                                            "B/Bmsy" = ">=1")
+                                            "B/Bmsy" = ">=1",
+                                            "F/F01" = "<=1",
+                                            "F/Fmax" = "<=1",
+                                            "F/F05" = "<=1")
 
-    ## estimate LBIs again specific for males and females
+    ## estimate LBIs again specific for males and females!
 
 
     # individuals
