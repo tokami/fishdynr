@@ -724,7 +724,6 @@ virtualPop <- function(tincr = 1/12,
 
 
    
-   
     ## YPR
     ##--------------------------------------------------------------------------------------------------
     yprList <- vector("list", length(c_list))
@@ -756,10 +755,12 @@ virtualPop <- function(tincr = 1/12,
         slist <- list(selecType = 'trawl_ogive',    ## this should be flexible at some point
                       L50 = L50,
                       L75 = L50 + (wqs/2))
+
+##        if(i == length(c_list)) browser()
         
         resi <- predict_mod(param = lfqi,
                            type = "ypr",
-                           FM_change = seq(0,3,0.01),
+                           FM_change = seq(0,3,0.05),
 ##                           Lc_change = L50,
                            s_list = slist,
                            plot = FALSE, hide.progressbar = TRUE)
