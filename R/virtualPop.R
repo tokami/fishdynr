@@ -614,13 +614,13 @@ spmPlot <- function(pars){
 }
 
 
-    ## run model ---------------------------------------------------------------
+## run model ---------------------------------------------------------------
 
-    ## seed values
-    if(is.null(seed) || is.null(seed)){
-        seed <- floor(runif(1,1,1000))
-    }
-    seed2 <- seed + floor(runif(1,1,100))
+## seed values
+if(is.null(seed) || is.null(seed)){
+  seed <- floor(runif(1,1,1000))
+}
+seed2 <- seed + floor(runif(1,1,100))
 
 # Initial population
 lastID <- 0
@@ -633,9 +633,9 @@ inds <- express.inds(inds = inds, seed = seed)
 res <- list()
 res$pop <- list(
   dates = yeardec2date( date2yeardec(timemin.date) + (timeseq - timemin) ),
-	N = NaN*timeseq,
-	B = NaN*timeseq,
-	SSB = NaN*timeseq
+  N = NaN*timeseq,
+  B = NaN*timeseq,
+  SSB = NaN*timeseq
 )
 
 stockRec <- as.data.frame(matrix(ncol=2,nrow=0))
@@ -667,60 +667,60 @@ for(j in seq(timeseq)){
     Fmax <- 0
     lfqSamp <- 0
   } else if(min(sqrt((tj-fished_t)^2)) < 1e-8){
-       ## time index for fished_t
-          tfish <- which.min(abs(fished_t - tj))
-          ## provide yearly Fmax value (per fleet if multiple fleets simulated)
-          if(class(harvest_rate) == "matrix"){
-              Fmax <- harvest_rate[tfish,]
-          }else if(length(harvest_rate)>1){
-             Fmax <- harvest_rate[tfish]
-          }else{
-              Fmax <- harvest_rate
-          }
-          lfqSamp <- 1
-          } else {
-      Fmax <- 0
-      lfqSamp <- 0
+    ## time index for fished_t
+    tfish <- which.min(abs(fished_t - tj))
+    ## provide yearly Fmax value (per fleet if multiple fleets simulated)
+    if(class(harvest_rate) == "matrix"){
+      Fmax <- harvest_rate[tfish,]
+    }else if(length(harvest_rate)>1){
+      Fmax <- harvest_rate[tfish]
+    }else{
+      Fmax <- harvest_rate
     }
-
+    lfqSamp <- 1
+  } else {
+    Fmax <- 0
+    lfqSamp <- 0
+  }
+  
   repro <- repro_t[j]
-
-	# population processes
-	inds <- grow.inds(inds)
-	inds <- mature.inds(inds)
-	inds <- reproduce.inds(inds = inds, seed = seed+11+j)
-	inds <- death.inds(inds, seed = seed2+j)
-	## sample lfq data
-	if(lfqSamp){
-	  samp <- try(sample(seq(inds$L), ceiling(sum(inds$Fd)*lfqFrac), prob = inds$Fd), silent = TRUE)
+  
+  # population processes
+  inds <- grow.inds(inds)
+  inds <- mature.inds(inds)
+  inds <- reproduce.inds(inds = inds, seed = seed+11+j)
+  inds <- death.inds(inds, seed = seed2+j)
+  ## sample lfq data
+  if(lfqSamp){
+    samp <- try(sample(seq(inds$L), ceiling(sum(inds$Fd)*lfqFrac), prob = inds$Fd), silent = TRUE)
     if(class(samp) != "try-error"){
       lfq[[j]] <- inds$L[samp]
       indsSamp[[j]] <- inds[samp,]
     }
     rm(samp)
   }
-	inds <- remove.inds(inds)
-
-	# update results
-	res$pop$N[j] <- nrow(inds)
-	res$pop$B[j] <- sum(inds$W)
-	res$pop$SSB[j] <- sum(inds$W*inds$mat)
-	
-	## simulate unfished population for K, r and SSB_F=0
-	# population processes
-	indsf0 <- grow.inds(indsf0)
-	indsf0 <- mature.inds(indsf0)
-	indsf0 <- reproduce.inds(inds = indsf0, seed = seed+11+j, save = TRUE)
-	indsf0 <- death.inds(indsf0, seed = seed2+j, f0 = TRUE)
-	indsf0 <- remove.inds(indsf0)
-	
-	# update results
-	resf0$pop$N[j] <- nrow(indsf0)
-	resf0$pop$B[j] <- sum(indsf0$W)
-	resf0$pop$SSB[j] <- sum(indsf0$W * indsf0$mat)
-
-	## update progressbar
-	if(progressBar) setTxtProgressBar(pb, j)
+  inds <- remove.inds(inds)
+  
+  # update results
+  res$pop$N[j] <- nrow(inds)
+  res$pop$B[j] <- sum(inds$W)
+  res$pop$SSB[j] <- sum(inds$W*inds$mat)
+  
+  ## simulate unfished population for K, r and SSB_F=0
+  # population processes
+  indsf0 <- grow.inds(indsf0)
+  indsf0 <- mature.inds(indsf0)
+  indsf0 <- reproduce.inds(inds = indsf0, seed = seed+11+j, save = TRUE)
+  indsf0 <- death.inds(indsf0, seed = seed2+j, f0 = TRUE)
+  indsf0 <- remove.inds(indsf0)
+  
+  # update results
+  resf0$pop$N[j] <- nrow(indsf0)
+  resf0$pop$B[j] <- sum(indsf0$W)
+  resf0$pop$SSB[j] <- sum(indsf0$W * indsf0$mat)
+  
+  ## update progressbar
+  if(progressBar) setTxtProgressBar(pb, j)
 }
 if(progressBar) close(pb)
 
@@ -728,25 +728,30 @@ if(progressBar) close(pb)
 ## Estimate carrying capacity
 ## Alternative way build into loop above
 startyear  <- as.POSIXlt(timemin.date)
-startyear$year <- startyear$year + 20
+
+startyear$year <- startyear$year + spmYears
 year10 <- as.Date(startyear)
 cutoff <- which.min(abs(yeardec2date( date2yeardec(timemin.date) + (timeseq - timemin)) - year10))
 cc_years <- seq(timeseq)[-(1:cutoff)]
+
 if(length(cc_years) > 3){
-      mod <- lm(resf0$pop$B[cc_years] ~ 1)
-      resf0$pop$K <- as.numeric(coefficients(mod))
+  mod <- lm(resf0$pop$B[cc_years] ~ 1)
+  resf0$pop$K <- as.numeric(coefficients(mod))
 }
 if(length(cc_years) > 3){
   mod <- lm(resf0$pop$SSB[cc_years] ~ 1)
   resf0$pop$SSBf0 <- as.numeric(coefficients(mod))
-}
-if(length(cc_years) > 3){
-  mod <- lm(res$pop$SSB[cc_years] ~ 1)
-  res$pop$SSBf <- as.numeric(coefficients(mod))
+  res$pop$SSBf <- as.numeric(coefficients(mod))      
 }
 
-## estimate K, r, n 
-resSPM <- optim(par = c(resf0$pop$K, 1, 2), fn = spmOpt, B0 = resf0$pop$B[1])
+
+## estimate K, r, n     
+resSPM <- optim(par = c(resf0$pop$K, 1, 2), fn = spmOpt, B = resf0$pop$B, hessian = F, method = "BFGS")
+resSPM <- optim(par = resSPM$par, fn = spmOpt, B = resf0$pop$B, hessian = F, method = "BFGS")
+resSPM <- optim(par = resSPM$par, fn = spmOpt, B = resf0$pop$B, hessian = F, method = "CG")
+## alternatively SANN but takes longer
+
+
 Kest <- resSPM$par[1]
 rest <- resSPM$par[2]
 nest <- resSPM$par[3]
@@ -771,7 +776,6 @@ resf0$pop$r <- rest
 resf0$pop$n <- nest
 resf0$pop$m <- m
 resf0$pop$gamma <- gammal
-
 # Export data -------------------------------------------------------------
 
     ## for simulation of population without exploitation, necessary to make the lfq export optional:
