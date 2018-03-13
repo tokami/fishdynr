@@ -588,17 +588,18 @@ record.inds <- function(inds, ids=1:10, rec=NULL){
 	return(rec)
 }
 
-spmOpt <- function(x, B0){
+spmOpt <- function(x, B){
   K = x[1]
   r = x[2]
   n = x[3]
-  Bthat <- rep(NA, length(resf0$pop$B))
-  Bthat[1] <- B0
+  Bthat <- rep(NA, length(B))
+  Bthat[1] <- B[1]
   for(i in 2:length(Bthat)){
     Bthat[i] <- Bthat[i-1] + ((r / (n - 1)) * Bthat[i-1] * (1 - (Bthat[i-1] / K)^(n-1)))*tincr
   }
-  sum((resf0$pop$B - Bthat)^2)
+  sum((B - Bthat)^2)
 }
+
 
 spmPlot <- function(pars){
   B0 <- pars[1]
