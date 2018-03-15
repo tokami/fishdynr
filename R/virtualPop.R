@@ -177,10 +177,17 @@ virtualPop <- function(tincr = 1/12,
                        N0 = 1000,
                        fished_t = seq(17,25,tincr),
                        lfqFrac = 1,
+                       numSamp = NA,
                        spmYears = 10,
+                       addSurvey = FALSE,
+                       survey_t = seq(17,25,1/6),
+                       survey_L50 = 0.1 * Linf.mu,
+                       survey_wqs = survey_L50 * 0.2,
+                       numSampSurvey = 500,
                        progressBar = TRUE,
                        plot = TRUE,
                        seed = NULL){
+    
     ## Fishing mortality - effort - catchability
     ## if E == single value, assuming one fleet and same effort for all fished years
     if(length(as.numeric(Etf))==1){
@@ -221,7 +228,6 @@ virtualPop <- function(tincr = 1/12,
       harvest_rate <- Emat * qmat
     }
 
-
     selfunc <- function(Lt, fleetNo){
         if(is.na(fleetNo)){
             gear_typesX <- gear_types
@@ -248,6 +254,7 @@ virtualPop <- function(tincr = 1/12,
         return(pSel)
     }
 
+
     ## ## if multiple fleets target the same stock, the harvest rate of each fleet is scaled according to the combined harvest rate - this only works if all fleets would have the same gear!
     ## if(class(harvest_rate) == "matrix"){
     ##     multimat <- harvest_rate / rowSums(harvest_rate)
@@ -267,6 +274,13 @@ virtualPop <- function(tincr = 1/12,
     indsSamp <- vector(mode="list", length(timeseq))
     names(indsSamp) <- timeseq
 
+    ## make empty lfq object
+    lfqSurvey <- vector(mode="list", length(timeseq))
+    names(lfqSurvey) <- timeseq
+
+    indsSampSurvey <- vector(mode="list", length(timeseq))
+    names(indsSampSurvey) <- timeseq
+
 
     # Estimate tmaxrecr
     tmaxrecr <- (which.max(repro_wt)-1)*tincr
@@ -283,7 +297,7 @@ virtualPop <- function(tincr = 1/12,
     make.inds <- function(
             id=NaN, A = 0, L = 0, W=NaN, sex = NaN, mat=0,
             K = K.mu, Winf=NaN, Linf=NaN, phiprime=NaN,
-            F=NaN, Z=NaN, Fd=0, alive=1
+            F=NaN, Z=NaN, Fd=0, alive=1, FdSurvey = 0
     ){
       inds <- data.frame(
         id = id,
@@ -300,7 +314,8 @@ virtualPop <- function(tincr = 1/12,
         F = F,
         Z = Z,
         Fd = Fd,
-        alive = alive
+        alive = alive,
+        FdSurvey = FdSurvey
       )
       lastID <<- max(inds$id)
       return(inds)
@@ -373,50 +388,55 @@ virtualPop <- function(tincr = 1/12,
     }
 
     death.inds <- function(inds, seed, f0 = FALSE){
-      ## multiple fleets
-      if(class(harvest_rate)=="matrix"){
-        if(dim(harvest_rate)[2]>=2){
-          pSel <- matrix(NaN, ncol=dim(harvest_rate)[2],nrow=dim(inds)[1])
-          for(seli in 1:(dim(harvest_rate)[2])){
-            pSel[,seli] <- selfunc(Lt = inds$L, fleetNo = seli)
-          }
-          ## effective fishing mortality (in relation to selectivity) - per fleet with mutliple fleets
-          Feff <- pSel * Fmax
-          ## single fishing mortality value (per year) scaled according to F of each fleet
-          ## this calculation only works if there is fishery (Fmax in denominator not allowed to be 0, otherwise F = NaN and then Z = NaN), thus:
-          if(all(Fmax == 0)){
-            inds$F <- 0
+        ## multiple fleets
+        if(class(harvest_rate)=="matrix"){
+          if(dim(harvest_rate)[2]>=2){
+            pSel <- matrix(NaN, ncol=dim(harvest_rate)[2],nrow=dim(inds)[1])
+            for(seli in 1:(dim(harvest_rate)[2])){
+              pSel[,seli] <- selfunc(Lt = inds$L, fleetNo = seli)
+            }
+            ## effective fishing mortality (in relation to selectivity) - per fleet with mutliple fleets
+            Feff <- pSel * Fmax
+            ## single fishing mortality value (per year) scaled according to F of each fleet
+            ## this calculation only works if there is fishery (Fmax in denominator not allowed to be 0, otherwise F = NaN and then Z = NaN), thus:
+            if(all(Fmax == 0)){
+              inds$F <- 0
+            }else{
+              inds$F <- as.numeric(rowSums(Feff * Fmax) / sum(Fmax))
+            }
           }else{
-            inds$F <- as.numeric(rowSums(Feff * Fmax) / sum(Fmax))
+            ## single fleet
+            pSel <- selfunc(Lt = inds$L, fleetNo = NA)
+            inds$F <- as.numeric(pSel * Fmax)
           }
         }else{
           ## single fleet
           pSel <- selfunc(Lt = inds$L, fleetNo = NA)
           inds$F <- as.numeric(pSel * Fmax)
         }
-      }else{
-        ## single fleet
-        pSel <- selfunc(Lt = inds$L, fleetNo = NA)
-        inds$F <- as.numeric(pSel * Fmax)
-      }
-      inds$Z <- M + inds$F
-      if(f0) inds$Z <- M
-      pDeath <- 1 - exp(-inds$Z*tincr)
-      seed6 <- seed + 6
-      set.seed(seed6)
-      dead <- which(runif(nrow(inds)) < pDeath)
-      # determine if natural or fished
-      if(length(dead) > 0){
-        inds$alive[dead] <- 0
-        tmp <- cbind(inds$F[dead], inds$Z[dead])
-        # Fd=1 for fished individuals; Fd=0, for those that died naturally
-        seed7 <- seed + 7
-        set.seed(seed7)
-        Fd <- apply(tmp, 1, FUN=function(x){sample(c(0,1), size=1, prob=c(M/x[2], x[1]/x[2]) )})
-        inds$Fd[dead] <- Fd
-        rm(tmp)
-      }
-      return(inds)
+        
+        ## vulnerability to survey
+        pSelSurvey <- logisticSelect(Lt=inds$L, L50=survey_L50, wqs=survey_wqs)
+        inds$FdSurvey <- as.numeric(pSelSurvey * 1)
+
+        inds$Z <- M + inds$F
+        if(f0) inds$Z <- M
+        pDeath <- 1 - exp(-inds$Z*tincr)
+        seed6 <- seed + 6
+        set.seed(seed6)
+        dead <- which(runif(nrow(inds)) < pDeath)
+        # determine if natural or fished
+        if(length(dead) > 0){
+          inds$alive[dead] <- 0
+          tmp <- cbind(inds$F[dead], inds$Z[dead])
+          # Fd=1 for fished individuals; Fd=0, for those that died naturally
+          seed7 <- seed + 7
+          set.seed(seed7)
+          Fd <- apply(tmp, 1, FUN=function(x){sample(c(0,1), size=1, prob=c(M/x[2], x[1]/x[2]) )})
+          inds$Fd[dead] <- Fd
+          rm(tmp)
+        }
+        return(inds)
     }
 
     remove.inds <- function(inds){
@@ -519,49 +539,81 @@ virtualPop <- function(tincr = 1/12,
       SSB = NaN*timeseq
     )
 
+    ## for total catches per time step (e.g. for correction factor in VPA)
+    catches <- vector("numeric",length(timeseq))
+
     ## simulation
     if(progressBar) pb <- txtProgressBar(min=1, max=length(timeseq), style=3)
+
     for(j in seq(timeseq)){
-      tj <- timeseq[j]
 
-      ## harvest rate applied? lfq sampled?
-      if(is.na(fished_t[1]) | is.nan(fished_t[1])){ ## before: length(fished_t) == 0 : as I see it fished_t never has length 0, even if set ot NA or NaN, it woudl have length 1
-        Fmax <- 0
-        lfqSamp <- 0
-      } else if(min(sqrt((tj-fished_t)^2)) < 1e-8){
-           ## time index for fished_t
-              tfish <- which.min(abs(fished_t - tj))
-              ## provide yearly Fmax value (per fleet if multiple fleets simulated)
-              if(class(harvest_rate) == "matrix"){
-                  Fmax <- harvest_rate[tfish,]
-              }else if(length(harvest_rate)>1){
-                 Fmax <- harvest_rate[tfish]
-              }else{
-                  Fmax <- harvest_rate
-              }
-              lfqSamp <- 1
-              } else {
-          Fmax <- 0
-          lfqSamp <- 0
+        tj <- timeseq[j]
+
+
+        ## harvest rate applied? lfq sampled?
+        if(is.na(fished_t[1]) | is.nan(fished_t[1])){ ## before: length(fished_t) == 0 : as I see it fished_t never has length 0, even if set ot NA or NaN, it woudl have length 1
+            Fmax <- 0
+            lfqSamp <- 0
+        } else if(min(sqrt((tj-fished_t)^2)) < 1e-8){
+            ## time index for fished_t
+            tfish <- which.min(abs(fished_t - tj))
+            ## provide yearly Fmax value (per fleet if multiple fleets simulated)
+            if(class(harvest_rate) == "matrix"){
+                Fmax <- harvest_rate[tfish,]
+            }else if(length(harvest_rate)>1){
+                Fmax <- harvest_rate[tfish]
+            }else{
+                Fmax <- harvest_rate
+            }
+            lfqSamp <- 1
+        } else {
+            Fmax <- 0
+            lfqSamp <- 0
+        }
+        if(addSurvey & min(sqrt((tj-survey_t)^2)) < 1e-8){
+            lfqSampSurvey <- 1
+        }else lfqSampSurvey <- 0
+
+        repro <- repro_t[j]
+
+        # population processes
+        inds <- grow.inds(inds)
+        inds <- mature.inds(inds)
+        inds <- reproduce.inds(inds = inds, seed = seed+11+j)
+        inds <- death.inds(inds, seed = seed2+j)
+
+
+        ## sample lfq data
+        if(lfqSamp){
+            if(!is.na(numSamp) & !is.null(numSamp)){
+                monthlySamples <- min(sum(inds$Fd),numSamp) ## cannot sample fish than which died
+                ## writeLines(noquote("The number of length measurements exceeds number of fish being caught."))
+                catches[j] <- sum(inds$Fd)
+            }else{
+               monthlySamples <- ceiling(sum(inds$Fd)*lfqFrac)
+            }
+            samp <- try(sample(seq(inds$L), monthlySamples, prob = inds$Fd), silent = TRUE)
+            if(class(samp) != "try-error"){
+                lfq[[j]] <- inds$L[samp]
+                indsSamp[[j]] <- inds[samp,]
+            }
+            rm(samp)
         }
 
-      repro <- repro_t[j]
-
-            # population processes
-            inds <- grow.inds(inds)
-            inds <- mature.inds(inds)
-            inds <- reproduce.inds(inds = inds, seed = seed+11+j)
-            inds <- death.inds(inds, seed = seed2+j)
-            ## sample lfq data
-            if(lfqSamp){
-              samp <- try(sample(seq(inds$L), ceiling(sum(inds$Fd)*lfqFrac), prob = inds$Fd), silent = TRUE)
-        if(class(samp) != "try-error"){
-          lfq[[j]] <- inds$L[samp]
-          indsSamp[[j]] <- inds[samp,]
+        
+        ## survey samples indivudals without removing them
+        if(lfqSampSurvey){
+            sampSurvey <- try(sample(seq(inds$L), numSampSurvey, prob = inds$FdSurvey), silent = TRUE)
+            if(class(sampSurvey) != "try-error"){
+                lfqSurvey[[j]] <- inds$L[sampSurvey]
+                indsSampSurvey[[j]] <- inds[sampSurvey,]
+            }
+            rm(sampSurvey)
         }
-        rm(samp)
-      }
-            inds <- remove.inds(inds)
+
+      
+      inds <- remove.inds(inds)
+      
 
             # update results
             res$pop$N[j] <- nrow(inds)
@@ -639,33 +691,54 @@ virtualPop <- function(tincr = 1/12,
     resf0$pop$m <- m
     resf0$pop$gamma <- gammal
 
-    # Export data -------------------------------------------------------------
 
-        ## for simulation of population without exploitation, necessary to make the lfq export optional:
-        if(any(!is.na(fished_t[1]) & !is.nan(fished_t[1])) & (lfqFrac != 0 & !is.na(lfqFrac) & !is.nan(lfqFrac))){
-            ## Trim and Export 'lfq'
-            lfq2 <- lfq[which(sapply(lfq, length) > 0)]
-            ## binned version of lfq
-            dates <- yeardec2date( date2yeardec(timemin.date) + (as.numeric(names(lfq2)) - timemin) )
-            Lran <- range(unlist(lfq2))
-            Lran[1] <- floor(Lran[1])
-            Lran[2] <- (ceiling(Lran[2])%/%bin.size + ceiling(Lran[2])%%bin.size + 1) * bin.size
-            bin.breaks <- seq(Lran[1], Lran[2], by=bin.size)
-            bin.mids <- bin.breaks[-length(bin.breaks)] + bin.size/2
-            res$lfqbin <- list(
-                sample.no = seq(bin.mids),
-                midLengths = bin.mids,
-                dates = dates,
-                catch = sapply(lfq2, FUN = function(x){
-                    hist(x, breaks=bin.breaks, plot = FALSE, include.lowest = TRUE)$counts
-                })
-            )
-        }
+    ## Export data -------------------------------------------------------------
 
 
+    ## for simulation of population without exploitation, necessary to make the lfq export optional:
+    if(any(!is.na(fished_t[1]) & !is.nan(fished_t[1])) & (lfqFrac != 0 & !is.na(lfqFrac) & !is.nan(lfqFrac))){
+        ## Trim and Export 'lfq'
+        lfq2 <- lfq[which(sapply(lfq, length) > 0)]
+        ## binned version of lfq
+        dates <- yeardec2date( date2yeardec(timemin.date) + (as.numeric(names(lfq2)) - timemin) )
+        Lran <- range(unlist(lfq2))
+        Lran[1] <- floor(Lran[1])
+        Lran[2] <- (ceiling(Lran[2])%/%bin.size + ceiling(Lran[2])%%bin.size + 1) * bin.size
+        bin.breaks <- seq(Lran[1], Lran[2], by=bin.size)
+        bin.mids <- bin.breaks[-length(bin.breaks)] + bin.size/2
+        res$lfqbin <- list(
+            sample.no = seq(bin.mids),
+            midLengths = bin.mids,
+            dates = dates,
+            catch = sapply(lfq2, FUN = function(x){
+                hist(x, breaks=bin.breaks, plot = FALSE, include.lowest = TRUE)$counts
+            })
+        )
+    }
 
 
-    
+    ## export of survey data
+    if(addSurvey & any(!is.na(survey_t[1]) & !is.nan(survey_t[1])) &
+       (!is.na(numSampSurvey) & !is.na(numSampSurvey))){
+        ## Trim and Export 'lfq'
+        lfqS2 <- lfqSurvey[which(sapply(lfqSurvey, length) > 0)]
+        ## binned version of lfq
+        datesS <- yeardec2date( date2yeardec(timemin.date) + (as.numeric(names(lfqS2)) - timemin) )
+        Lran <- range(unlist(lfqS2))
+        Lran[1] <- floor(Lran[1])
+        Lran[2] <- (ceiling(Lran[2])%/%bin.size + ceiling(Lran[2])%%bin.size + 1) * bin.size
+        bin.breaks <- seq(Lran[1], Lran[2], by=bin.size)
+        bin.mids <- bin.breaks[-length(bin.breaks)] + bin.size/2
+        res$lfqbinSurvey <- list(
+            sample.no = seq(bin.mids),
+            midLengths = bin.mids,
+            dates = datesS,
+            catch = sapply(lfqS2, FUN = function(x){
+                hist(x, breaks=bin.breaks, plot = FALSE, include.lowest = TRUE)$counts
+            })
+        )
+    }
+
     ## Saving reference levels
     ##--------------------------------------------------------------------------------------------------    
     fished_dates <- res$lfqbin$dates ## yeardec2date(date2yeardec(timemin.date) + (fished_t - timemin))
@@ -707,6 +780,9 @@ virtualPop <- function(tincr = 1/12,
     Prod <- (rest / (nest - 1)) * bioPlot * (1 - (bioPlot / Kest)^(nest-1))
 
 
+
+
+    ## only works if fished_t is not empty meaning when lfq data is collected! fix!!
 
     
     ## for ypr and LBIs
@@ -756,8 +832,6 @@ virtualPop <- function(tincr = 1/12,
                       L50 = L50,
                       L75 = L50 + (wqs/2))
 
-##        if(i == length(c_list)) browser()
-        
         resi <- predict_mod(param = lfqi,
                            type = "ypr",
                            FM_change = seq(0,3,0.05),
@@ -875,6 +949,11 @@ virtualPop <- function(tincr = 1/12,
     res$inds <- indsSamp
 
 
+    ## individuals in survey
+    indsSampSurvey <- indsSampSurvey[which(sapply(indsSampSurvey, length) > 0)]
+    res$indsSurvey <- indsSampSurvey
+
+
     # record mean parameters
     res$growthpars <- list(
       K = K.mu,
@@ -892,10 +971,12 @@ virtualPop <- function(tincr = 1/12,
         ## if fisheries are simulated
         if(any(!is.na(fished_t) & !is.nan(fished_t))){
             res$fisheries <- list(
-                fished_years = yeardec2date( date2yeardec(timemin.date) + (timeseq - timemin) )[fished_t],
+                fished_t = yeardec2date(date2yeardec(timemin.date) +
+                                         (timeseq[timeseq %in% fished_t] - timemin)),
                 E = Emat,
                 q = qmat,
-                F = harvest_rate
+                F = harvest_rate,
+                C = catches
             )
         }
 
