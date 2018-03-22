@@ -367,7 +367,7 @@ virtualPop <- function(tincr = 1/12,
             ## reproduction can only occur of population contains >1 mature individual
         if(repro > 0 & sum(inds$mat) > 0){
             ## calc. SSB
-            SSB <- sum(inds$W*inds$mat)
+            SSB <- sum(inds$W*inds$mat, na.rm = TRUE)
             n.recruits <- ceiling(srrBH(rmaxBH, betaBH, SSB) * repro)
             ## add noise to recruitment process
             seed5 <- seed + 5
@@ -576,6 +576,8 @@ virtualPop <- function(tincr = 1/12,
 
         repro <- repro_t[j]
 
+        inds
+
         # population processes
         inds <- grow.inds(inds)
         inds <- mature.inds(inds)
@@ -617,8 +619,8 @@ virtualPop <- function(tincr = 1/12,
 
             # update results
             res$pop$N[j] <- nrow(inds)
-            res$pop$B[j] <- sum(inds$W)
-            res$pop$SSB[j] <- sum(inds$W*inds$mat)
+            res$pop$B[j] <- sum(inds$W, na.rm = TRUE)
+            res$pop$SSB[j] <- sum(inds$W*inds$mat, na.rm = TRUE)
 
             ## simulate unfished population for K, r and SSB_F=0
             # population processes
@@ -630,8 +632,8 @@ virtualPop <- function(tincr = 1/12,
 
             # update results
             resf0$pop$N[j] <- nrow(indsf0)
-            resf0$pop$B[j] <- sum(indsf0$W)
-            resf0$pop$SSB[j] <- sum(indsf0$W * indsf0$mat)
+            resf0$pop$B[j] <- sum(indsf0$W, na.rm = TRUE)
+            resf0$pop$SSB[j] <- sum(indsf0$W * indsf0$mat, na.rm = TRUE)
 
             ## update progressbar
             if(progressBar) setTxtProgressBar(pb, j)
