@@ -34,6 +34,7 @@
 #' @param fished_t times when stock is fished; when NA no exploitation simulated
 #' @param lfqFrac fraction of fished stock that are sampled for length frequency data (default = 0.1).
 #' @param spmYears number of years which are used for fitting the surplus production model (Default 10)
+#' @param binSizeVPA bin size for the application of VPA (to derive reference points in ypr)
 #' @param progressBar Logical. Should progress bar be shown in console (Default=TRUE)
 #' @param plot Logical. Should the standard plots be printed (Default=TRUE)
 #' @param seed integer; indicating the seed for set.seed()
@@ -184,6 +185,7 @@ virtualPop <- function(tincr = 1/12,
                        survey_L50 = 0.1 * Linf.mu,
                        survey_wqs = survey_L50 * 0.2,
                        numSampSurvey = 500,
+                       binSizeVPA = bin.size,
                        progressBar = TRUE,
                        plot = TRUE,
                        seed = NULL){
@@ -801,7 +803,6 @@ virtualPop <- function(tincr = 1/12,
     }
 
 
-   
     ## YPR
     ##--------------------------------------------------------------------------------------------------
     yprList <- vector("list", length(c_list))
@@ -815,6 +816,7 @@ virtualPop <- function(tincr = 1/12,
         lfqi <- lfqModify(lfqi, vectorise_catch = TRUE)  ## only to remove 0s catches of small fish (for Lr)
         lfqi$Lr <- min(lfqi$midLengths)
         lfqi$Lc <- L50
+        
         lfqi <- c(lfqi,
                   Linf = Linf.mu,
                   K = K.mu,
@@ -826,23 +828,45 @@ virtualPop <- function(tincr = 1/12,
                             ## 2015 only as example year to get the decimial of spawning months
                             w = repro_wt[which(repro_wt != 0)]),  ## weighted mean of t_anchor
                   M = M,
+                  FM = harvest_rate[i], 
                   a = LWa,
                   b = LWb)
         class(lfqi) <- "lfq"
 
+
+        ## one way with F vector from VPA
+        lfqi <- lfqModify(lfqi, bin_size = binSizeVPA)
+        if(any(lfqi$catch == 0)){
+            lfqi <- lfqModify(lfqi,
+                              plus_group = lfqi$midLengths[min(which(lfqi$catch == 0))])
+        }
+        tty <- VPA(lfqi, terminalF = harvest_rate)
+        lfqi$FM <- tty$FM_calc
+        resi <- predict_mod(param = lfqi,
+                           type = "ThompBell",
+                           FM_change = seq(0,3,0.05),
+                           plot = FALSE, hide.progressbar = TRUE)
+
+        indi <- names(resi$df_Es) %in% c("Fmax","F05")
+        tmp <- resi$df_Es[indi]
+
+        if(FALSE){
+        ## one way with selectivity parameters
         slist <- list(selecType = 'trawl_ogive',    ## this should be flexible at some point
                       L50 = L50,
                       L75 = L50 + (wqs/2))
 
         resi <- predict_mod(param = lfqi,
-                           type = "ypr",
+                           type = "ThompBell",
                            FM_change = seq(0,3,0.05),
-##                           Lc_change = L50,
                            s_list = slist,
                            plot = FALSE, hide.progressbar = TRUE)
 
-        indi <- names(resi$df_Es) %in% c("F01","Fmax","F05")
+        indi <- names(resi$df_Es) %in% c("Fmax","F05")
         tmp <- resi$df_Es[indi]
+        }
+        
+
         if(!"F05" %in% names(resi$df_Es)){
             tmp <- unlist(c(tmp, F05 = NA))
         }
@@ -924,9 +948,9 @@ virtualPop <- function(tincr = 1/12,
                                     "SPR" = round(res$refLev$SPR,2),
                                     "F/Fmsy" = round(harvest_rateYear/Fdmsy,2),
                                     "B/Bmsy" = round(bioYear/Bdmsy,2),
-                                    "F/F01" = round(harvest_rateYear/yprRes[,1],2),
-                                    "F/Fmax" = round(harvest_rateYear/yprRes[,2],2),
-                                    "F/F05" = round(harvest_rateYear/yprRes[,3],2))
+##                                    "F/F01" = round(harvest_rateYear/yprRes[,1],2),
+                                    "F/Fmax" = round(harvest_rateYear/yprRes[,1],2),
+                                    "F/F05" = round(harvest_rateYear/yprRes[,2],2))
     
     res$refLev$statesRefPoint <- data.frame("Lmax5/Linf" = ">0.8",
                                             "L95/Linf" = ">0.8",
@@ -939,7 +963,7 @@ virtualPop <- function(tincr = 1/12,
                                             "SPR" = ">0.3",
                                             "F/Fmsy" = "<=1",
                                             "B/Bmsy" = ">=1",
-                                            "F/F01" = "<=1",
+##                                            "F/F01" = "<=1",
                                             "F/Fmax" = "<=1",
                                             "F/F05" = "<=1")
 
