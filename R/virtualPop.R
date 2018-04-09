@@ -299,7 +299,7 @@ virtualPop <- function(tincr = 1/12,
     make.inds <- function(
             id=NaN, A = 0, L = 0, W=NaN, sex = NaN, mat=0,
             K = K.mu, Winf=NaN, Linf=NaN, phiprime=NaN,
-            F=NaN, Z=NaN, Fd=0, alive=1, FdSurvey = 0
+            F=NaN, Z=NaN, Fd=0, alive=1, FSurvey = 0
     ){
       inds <- data.frame(
         id = id,
@@ -317,7 +317,7 @@ virtualPop <- function(tincr = 1/12,
         Z = Z,
         Fd = Fd,
         alive = alive,
-        FdSurvey = FdSurvey
+        FSurvey = FSurvey
       )
       lastID <<- max(inds$id)
       return(inds)
@@ -419,7 +419,7 @@ virtualPop <- function(tincr = 1/12,
         
         ## vulnerability to survey
         pSelSurvey <- logisticSelect(Lt=inds$L, L50=survey_L50, wqs=survey_wqs)
-        inds$FdSurvey <- as.numeric(pSelSurvey * 1)
+        inds$FSurvey <- as.numeric(pSelSurvey * 1)
 
         inds$Z <- M + inds$F
         if(f0) inds$Z <- M
@@ -578,8 +578,6 @@ virtualPop <- function(tincr = 1/12,
 
         repro <- repro_t[j]
 
-        inds
-
         # population processes
         inds <- grow.inds(inds)
         inds <- mature.inds(inds)
@@ -594,9 +592,10 @@ virtualPop <- function(tincr = 1/12,
                 ## writeLines(noquote("The number of length measurements exceeds number of fish being caught."))
                 catches[j] <- sum(inds$Fd)
             }else{
-               monthlySamples <- ceiling(sum(inds$Fd)*lfqFrac)
+                monthlySamples <- ceiling(sum(inds$Fd)*lfqFrac)
+                catches[j] <- sum(inds$Fd)                
             }
-            samp <- try(sample(seq(inds$L), monthlySamples, prob = inds$Fd), silent = TRUE)
+            samp <- try(sample(seq(inds$L), monthlySamples, prob = inds$F/max(inds$F)), silent = TRUE)
             if(class(samp) != "try-error"){
                 lfq[[j]] <- inds$L[samp]
                 indsSamp[[j]] <- inds[samp,]
@@ -607,7 +606,7 @@ virtualPop <- function(tincr = 1/12,
         
         ## survey samples indivudals without removing them
         if(lfqSampSurvey){
-            sampSurvey <- try(sample(seq(inds$L), numSampSurvey, prob = inds$FdSurvey), silent = TRUE)
+            sampSurvey <- try(sample(seq(inds$L), numSampSurvey, prob = inds$FSurvey), silent = TRUE)
             if(class(sampSurvey) != "try-error"){
                 lfqSurvey[[j]] <- inds$L[sampSurvey]
                 indsSampSurvey[[j]] <- inds[sampSurvey,]
@@ -835,7 +834,7 @@ virtualPop <- function(tincr = 1/12,
 
 
         ## one way with F vector from VPA
-        lfqi <- lfqModify(lfqi, bin_size = binSizeVPA)
+        lfqi <- lfqModify(lfqi, bin_size = 0.5) ##binSizeVPA)
         if(any(lfqi$catch == 0)){
             lfqi <- lfqModify(lfqi,
                               plus_group = lfqi$midLengths[min(which(lfqi$catch == 0))])
