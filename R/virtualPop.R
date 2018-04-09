@@ -827,19 +827,19 @@ virtualPop <- function(tincr = 1/12,
                             ## 2015 only as example year to get the decimial of spawning months
                             w = repro_wt[which(repro_wt != 0)]),  ## weighted mean of t_anchor
                   M = M,
-                  FM = harvest_rate[i], 
+##                  FM = harvest_rate[i], 
                   a = LWa,
                   b = LWb)
         class(lfqi) <- "lfq"
 
 
         ## one way with F vector from VPA
-        lfqi <- lfqModify(lfqi, bin_size = 0.5) ##binSizeVPA)
+        lfqi <- lfqModify(lfqi, bin_size = binSizeVPA)
         if(any(lfqi$catch == 0)){
             lfqi <- lfqModify(lfqi,
                               plus_group = lfqi$midLengths[min(which(lfqi$catch == 0))])
         }
-        tty <- VPA(lfqi, terminalF = harvest_rate)
+        tty <- VPA(lfqi, terminalF = harvest_rate[i])
         lfqi$FM <- tty$FM_calc
         resi <- predict_mod(param = lfqi,
                            type = "ThompBell",
