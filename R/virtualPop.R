@@ -835,22 +835,30 @@ virtualPop <- function(tincr = 1/12,
                   b = LWb)
         class(lfqi) <- "lfq"
 
-
         ## one way with F vector from VPA
-        lfqi <- lfqModify(lfqi, bin_size = binSizeVPA)
-        if(any(lfqi$catch == 0)){
-            lfqi <- lfqModify(lfqi,
-                              plus_group = lfqi$midLengths[min(which(lfqi$catch == 0))])
-        }
-        tty <- VPA(lfqi, terminalF = harvest_rate[i])
-        lfqi$FM <- tty$FM_calc
-        resi <- predict_mod(param = lfqi,
-                           type = "ThompBell",
-                           FM_change = seq(0,3,0.05),
-                           plot = FALSE, hide.progressbar = TRUE)
+        if(length(lfqi$midLengths) > 1){
+            lfqi <- lfqModify(lfqi, bin_size = binSizeVPA)
+            if(any(lfqi$catch == 0)){
+                lfqi <- lfqModify(lfqi,
+                                  plus_group = lfqi$midLengths[min(which(lfqi$catch == 0))])
+            }
+            tty <- VPA(lfqi, terminalF = harvest_rate[i])
+            lfqi$FM <- tty$FM_calc
+            resi <- predict_mod(param = lfqi,
+                               type = "ThompBell",
+                               FM_change = seq(0,3,0.05),
+                               plot = FALSE, hide.progressbar = TRUE)
 
-        indi <- names(resi$df_Es) %in% c("Fmax","F05")
-        tmp <- resi$df_Es[indi]
+            indi <- names(resi$df_Es) %in% c("Fmax","F05")
+            tmp <- resi$df_Es[indi]
+
+            if(!"F05" %in% names(resi$df_Es)){
+                tmp <- unlist(c(tmp, F05 = NA))
+            }
+        }else{
+            tmp = data.frame(Fmax = NA, F05 = NA)
+        }
+        
 
         if(FALSE){
         ## one way with selectivity parameters
@@ -865,13 +873,14 @@ virtualPop <- function(tincr = 1/12,
                            plot = FALSE, hide.progressbar = TRUE)
 
         indi <- names(resi$df_Es) %in% c("Fmax","F05")
-        tmp <- resi$df_Es[indi]
-        }
-        
 
+        tmp <- resi$df_Es[indi]
+            
         if(!"F05" %in% names(resi$df_Es)){
             tmp <- unlist(c(tmp, F05 = NA))
         }
+        }
+        
         yprList[[i]] <- tmp
     }
     yprRes <- do.call(rbind, yprList)
