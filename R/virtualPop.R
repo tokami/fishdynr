@@ -742,6 +742,9 @@ virtualPop <- function(tincr = 1/12,
         )
     }
 
+
+
+    
     ## Saving reference levels
     ##--------------------------------------------------------------------------------------------------    
     fished_dates <- res$lfqbin$dates ## yeardec2date(date2yeardec(timemin.date) + (fished_t - timemin))
@@ -910,7 +913,7 @@ virtualPop <- function(tincr = 1/12,
     Lc <- L50   ## check again with gillnet selectivity, then ICES formula
     res$refLev$Lc <- Lc
     ## alternatively: 50% of mode
-    modes <- unlist(lapply(c_list, function(x) midLengths[x == max(x, na.rm=TRUE)]))
+    modes <- unlist(lapply(c_list, function(x) midLengths[which.max(x)]))
     Lcalt <- vector('numeric',length(dates))
     for(i in 1:length(dates)){
       temp <- as.numeric(cumSum_perc[[i]][modes[i]])
@@ -928,9 +931,10 @@ virtualPop <- function(tincr = 1/12,
     res$refLev$Lmean <- round(Lmean,2)
     res$refLev$LFeM <- LFeM
     ## length class with maximum in biomass (/Lopt ~1)
+    
     midWeights <- LWa * midLengths ^ LWb
     bio_list <- lapply(c_list, function(x) x * midWeights)
-    Lmaxy <- unlist(lapply(bio_list, function(x) midLengths[x == max(x, na.rm = TRUE)]))
+    Lmaxy <- unlist(lapply(bio_list, function(x) midLengths[which.max(x)]))
     res$refLev$Lmaxy <- as.numeric(Lmaxy)
 
 
