@@ -828,21 +828,21 @@ virtualPop2 <- function(tincr = 1/12,
                 lfqi <- lfqModify(lfqi,
                                   plus_group = lfqi$midLengths[min(which(lfqi$catch == 0))])
             }
-            tty <- VPA(lfqi, terminalF = harvest_rate[i])
+            tty <- suppressWarnings(VPA(lfqi, terminalF = harvest_rate[i]))
             lfqi$FM <- tty$FM_calc
             resi <- predict_mod(param = lfqi,
                                type = "ThompBell",
                                FM_change = seq(0,3,0.05),
                                plot = FALSE, hide.progressbar = TRUE)
 
-            indi <- names(resi$df_Es) %in% c("Fmax","F05")
+            indi <- names(resi$df_Es) %in% c("F01","Fmax","F05")
             tmp <- resi$df_Es[indi]
 
             if(!"F05" %in% names(resi$df_Es)){
                 tmp <- unlist(c(tmp, F05 = NA))
             }
         }else{
-            tmp = data.frame(Fmax = NA, F05 = NA)
+            tmp = data.frame(F01 = NA, Fmax = NA, F05 = NA)
         }
         
 
@@ -858,7 +858,7 @@ virtualPop2 <- function(tincr = 1/12,
                            s_list = slist,
                            plot = FALSE, hide.progressbar = TRUE)
 
-        indi <- names(resi$df_Es) %in% c("Fmax","F05")
+        indi <- names(resi$df_Es) %in% c("F01","Fmax","F05")
 
         tmp <- resi$df_Es[indi]
             
@@ -946,9 +946,9 @@ virtualPop2 <- function(tincr = 1/12,
                                     "SPR" = round(res$refLev$SPR,2),
                                     "F/Fmsy" = round(harvest_rateYear/Fdmsy,2),
                                     "B/Bmsy" = round(bioYear/Bdmsy,2),
-##                                    "F/F01" = round(harvest_rateYear/yprRes[,1],2),
-                                    "F/Fmax" = round(harvest_rateYear/yprRes[,1],2),
-                                    "F/F05" = round(harvest_rateYear/yprRes[,2],2))
+                                    "F/F01" = round(harvest_rateYear/yprRes[,1],2),
+                                    "F/Fmax" = round(harvest_rateYear/yprRes[,2],2),
+                                    "F/F05" = round(harvest_rateYear/yprRes[,3],2))
     
     res$refLev$statesRefPoint <- data.frame("Lmax5/Linf" = ">0.8",
                                             "L95/Linf" = ">0.8",
@@ -961,7 +961,7 @@ virtualPop2 <- function(tincr = 1/12,
                                             "SPR" = ">0.3",
                                             "F/Fmsy" = "<=1",
                                             "B/Bmsy" = ">=1",
-##                                            "F/F01" = "<=1",
+                                            "F/F01" = "<=1",
                                             "F/Fmax" = "<=1",
                                             "F/F05" = "<=1")
 
