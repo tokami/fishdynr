@@ -581,23 +581,29 @@ virtualPop2 <- function(tincr = 1/12,
                 monthlySamples <- ceiling(sum(inds$Fd)*lfqFrac)
                 catches[j] <- sum(inds$Fd)                
             }
-            samp <- try(sample(seq(inds$L), monthlySamples, prob = inds$F/max(inds$F)), silent = TRUE)
-            if(class(samp) != "try-error"){
-                lfq[[j]] <- inds$L[samp]
-                indsSamp[[j]] <- inds[samp,]
+            tmp <- inds[inds$L > 0,] ## have to have positive length
+            if(nrow(tmp) > 0){
+                samp <- try(sample(seq(tmp$L), monthlySamples, prob = tmp$F/max(tmp$F)), silent = TRUE)
+                if(class(samp) != "try-error"){
+                    lfq[[j]] <- tmp$L[samp]
+                    indsSamp[[j]] <- tmp[samp,]
+                }
+                rm(samp)
             }
-            rm(samp)
         }
 
         
         ## survey samples indivudals without removing them
         if(lfqSampSurvey){
-            sampSurvey <- try(sample(seq(inds$L), numSampSurvey, prob = inds$FSurvey), silent = TRUE)
-            if(class(sampSurvey) != "try-error"){
-                lfqSurvey[[j]] <- inds$L[sampSurvey]
-                indsSampSurvey[[j]] <- inds[sampSurvey,]
+            tmp <- inds[inds$L > 0,] ## have to have positive length
+            if(nrow(tmp) > 0){            
+                sampSurvey <- try(sample(seq(tmp$L), numSampSurvey, prob = tmp$FSurvey), silent = TRUE)
+                if(class(sampSurvey) != "try-error"){
+                    lfqSurvey[[j]] <- tmp$L[sampSurvey]
+                    indsSampSurvey[[j]] <- tmp[sampSurvey,]
+                }
+                rm(sampSurvey)
             }
-            rm(sampSurvey)
         }
 
       
@@ -908,7 +914,7 @@ virtualPop2 <- function(tincr = 1/12,
     Lc <- L50   ## check again with gillnet selectivity, then ICES formula
     res$refLev$Lc <- Lc
     ## alternatively: 50% of mode
-    modes <- unlist(lapply(c_list, function(x) midLengths[which.max(x)]))
+    modes <- unlist(lapply(c_list, function(x) which.max(x)))   ## deleted midLengths[which...
     Lcalt <- vector('numeric',length(dates))
     for(i in 1:length(dates)){
       temp <- as.numeric(cumSum_perc[[i]][modes[i]])
