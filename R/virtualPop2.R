@@ -324,10 +324,10 @@ virtualPop2 <- function(tincr = 1/12,
     }
 
     express.inds <- function(inds){
-      inds$Linf <- Linf.mu * rlnorm(nrow(inds), 0, Linf.cv)
+      inds$Linf <- exp(rnorm(nrow(inds), log(Linf.mu), Linf.cv)) ## old:  Linf.mu * rlnorm(nrow(inds), 0, Linf.cv)
       inds$Winf <- LWa*inds$Linf^LWb
       # inds$K <- 10^(phiprime.mu - 2*log10(inds$Linf)) * rlnorm(nrow(inds), 0, K.cv)
-      inds$K <- K.mu * rlnorm(nrow(inds), 0, K.cv)
+      inds$K <- exp(rnorm(nrow(inds), log(K.mu), K.cv)) ## old: K.mu * rlnorm(nrow(inds), 0, K.cv)
       inds$W <- LWa*inds$L^LWb
       inds$phiprime <- log10(inds$K) + 2*log10(inds$Linf)
 
@@ -364,7 +364,7 @@ virtualPop2 <- function(tincr = 1/12,
             SSB <- sum(inds$W*inds$mat, na.rm = TRUE)
             n.recruits <- ceiling(srrBH(rmaxBH, betaBH, SSB) * repro)
             ## add noise to recruitment process
-            n.recruits <- n.recruits * rlnorm(1, 0, sdlog = srr.cv)
+            n.recruits <- exp(rnorm(1, log(n.recruits), srr.cv)) ## old: n.recruits * rlnorm(1, 0, sdlog = srr.cv)
             ## save SSB + n.recruits for stock recruitment plot
             if(save) stockRec <<- rbind(stockRec, data.frame(SSB = SSB, recruits = n.recruits))
             ## make recruits
