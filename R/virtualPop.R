@@ -900,6 +900,95 @@ virtualPop <- function(
     ## Production curve
     bioPlot <- spmPlot(c(res$pop$B[1], Kest,  rest, nest))
     Prod <- (rest / (nest - 1)) * bioPlot * (1 - (bioPlot / Kest)^(nest-1))
+
+
+
+    
+    ## only works if fished_t is not empty meaning when lfq data is collected! fix!!
+
+    
+
+
+    ## for ypr and LBIs
+    ## aggregate lfq data per year
+    c_sum <- with(res$lfqbin,by(t(catch), format(dates, "%Y"), FUN = colSums))
+    c_list <- lapply(as.list(c_sum), c)
+    midLengths <- res$lfqbin$midLengths
+    datesUni <- unique(as.Date(paste0(format(res$lfqbin$dates, "%Y"), "-01-01")))
+    ## cumulative and percentage cumulative catches
+    cumSum <- lapply(c_list, cumsum)
+    cumSum_perc <- vector("list",length(datesUni))
+    for(i in 1:length(c_list)){
+      cumSum_perc[[i]] <- cumSum[[i]] / sum(c_list[[i]])
+    }
+
+
+    ## YPR
+    ##--------------------------------------------------------------------------------------------------
+    yprList <- vector("list", length(c_list))
+    for(i in 1:length(c_list)){  ## loop through years
+
+        lfqi <- structure(list(dates = datesUni[i],
+                    midLengths = midLengths,
+                    catch = as.matrix(c_list[[i]])),
+                    class = "lfq")
+
+        lfqi <- lfqModify(lfqi, vectorise_catch = TRUE)  ## only to remove 0s catches of small fish (for Lr)
+        
+        lfqi <- c(lfqi,
+                  Linf = Linf.mu,
+                  K = K.mu,
+                  t0 = 0,
+                  C = C,
+                  ts = ts,
+                  t_anchor = weighted.mean(date2yeardec(as.Date(
+                            paste("2015",which(repro_wt != 0),"15",sep="-"))) %% 1,
+                            ## 2015 only as example year to get the decimial of spawning months
+                            w = repro_wt[which(repro_wt != 0)]),  ## weighted mean of t_anchor
+                  M = M,
+                  a = LWa,
+                  b = LWb)
+        class(lfqi) <- "lfq"
+
+        ## one way with F vector from VPA
+        if(length(lfqi$midLengths) > 1){
+            lfqi <- lfqModify(lfqi, bin_size = bin.size)
+            
+            interval <- lfqi$midLengths[2] - lfqi$midLengths[1]
+            upperLength <-  lfqi$midLengths + (interval / 2)
+
+            if(Linf.mu < max(upperLength)){
+                lfqi <- lfqModify(lfqi,
+                                  plus_group =
+                                      lfqi$midLengths[which.min(abs(upperLength -
+                                                                       floor(Linf.mu)))])
+                plus_group <- TRUE
+            }else{
+                plus_group <- FALSE
+            }
+            
+            tty <- suppressWarnings(VPA(lfqi, terminalF = harvest_rate[i], plus_group = plus_group))
+            lfqi$FM <- tty$FM_calc
+            lfqi$Lr <- min(lfqi$midLengths)
+            resi <- predict_mod(param = lfqi,
+                               type = "ThompBell",
+                               FM_change = seq(0,3,0.05),
+                               plot = FALSE, hide.progressbar = TRUE)
+
+            indi <- names(resi$df_Es) %in% c("F01","Fmax","F05")
+            tmp <- resi$df_Es[indi]
+
+            if(!"F05" %in% names(resi$df_Es)){
+                tmp <- unlist(c(tmp, F05 = NA))
+            }
+        }else{
+            tmp = data.frame(F01 = NA, Fmax = NA, F05 = NA)
+        }
+        
+        yprList[[i]] <- tmp
+    }
+    yprRes <- do.call(rbind, yprList)
+
     
     
     
@@ -959,9 +1048,30 @@ virtualPop <- function(
     res$refLev$Popt <- Popt
     res$refLev$Pmat <- Pmat
     res$refLev$Pobj <- Pobj
+    res$refLev$F01 <- yprRes[,1]
+    res$refLev$Fmax <- yprRes[,2]
+    res$refLev$F05 <- yprRes[,3]
     
-    res$refLev$states <- data.frame("F/Fmsy" = round(harvest_rateYear/Fdmsy, 2),
-                                    "B/Bmsy" = round(bioYear/Bdmsy, 2))
+
+    ##--------------------------------------------------------------------------------------------------
+    res$refLev$states <- data.frame("Pmega" = round(Pmega,2),
+                                    "SPR" = round(res$refLev$SPR,2),
+                                    "F/Fmsy" = round(harvest_rateYear/Fdmsy,2),
+                                    "B/Bmsy" = round(bioYear/Bdmsy,2),
+                                    "F/F01" = round(harvest_rateYear/yprRes[,1],2),
+                                    "F/Fmax" = round(harvest_rateYear/yprRes[,2],2),
+                                    "F/F05" = round(harvest_rateYear/yprRes[,3],2))
+    
+    res$refLev$statesRefPoint <- data.frame("Pmega" = ">0.3",
+                                            "SPR" = ">0.3",
+                                            "F/Fmsy" = "<=1",
+                                            "B/Bmsy" = ">=1",
+                                            "F/F01" = "<=1",
+                                            "F/Fmax" = "<=1",
+                                            "F/F05" = "<=1")
+
+    ## estimate LBIs again specific for males and females!
+
     
     
     # individuals
