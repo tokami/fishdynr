@@ -788,10 +788,10 @@ virtualPop2 <- function(tincr = 1/12,
     c_sum <- with(res$lfqbin,by(t(catch), format(dates, "%Y"), FUN = colSums))
     c_list <- lapply(as.list(c_sum), c)
     midLengths <- res$lfqbin$midLengths
-    dates <- unique(as.Date(paste0(format(dates, "%Y"), "-01-01")))
+    datesUni <- unique(as.Date(paste0(format(res$lfqbin$dates, "%Y"), "-01-01")))
     ## cumulative and percentage cumulative catches
     cumSum <- lapply(c_list, cumsum)
-    cumSum_perc <- vector("list",length(dates))
+    cumSum_perc <- vector("list",length(datesUni))
     for(i in 1:length(c_list)){
       cumSum_perc[[i]] <- cumSum[[i]] / sum(c_list[[i]])
     }
@@ -802,14 +802,12 @@ virtualPop2 <- function(tincr = 1/12,
     yprList <- vector("list", length(c_list))
     for(i in 1:length(c_list)){  ## loop through years
 
-        lfqi <- structure(list(dates = dates[i],
+        lfqi <- structure(list(dates = datesUni[i],
                     midLengths = midLengths,
                     catch = as.matrix(c_list[[i]])),
                     class = "lfq")
 
         lfqi <- lfqModify(lfqi, vectorise_catch = TRUE)  ## only to remove 0s catches of small fish (for Lr)
-        lfqi$Lr <- min(lfqi$midLengths)
-        lfqi$Lc <- L50
         
         lfqi <- c(lfqi,
                   Linf = Linf.mu,
@@ -830,12 +828,28 @@ virtualPop2 <- function(tincr = 1/12,
         ## one way with F vector from VPA
         if(length(lfqi$midLengths) > 1){
             lfqi <- lfqModify(lfqi, bin_size = binSizeVPA)
-            if(any(lfqi$catch == 0)){
+            
+            interval <- lfqi$midLengths[2] - lfqi$midLengths[1]
+            upperLength <-  lfqi$midLengths + (interval / 2)
+
+            if(Linf.mu < max(upperLength)){
                 lfqi <- lfqModify(lfqi,
-                                  plus_group = lfqi$midLengths[min(which(lfqi$catch == 0))])
+                                  plus_group =
+                                      lfqi$midLengths[which.min(abs(upperLength -
+                                                                       floor(Linf.mu)))])
+                plus_group <- TRUE
+            }else{
+                plus_group <- FALSE
             }
-            tty <- suppressWarnings(VPA(lfqi, terminalF = harvest_rate[i]))
+            
+##            if(any(lfqi$catch == 0)){
+##                lfqi <- lfqModify(lfqi,
+##                                  plus_group = lfqi$midLengths[min(which(lfqi$catch == 0))])
+##            }
+            tty <- suppressWarnings(VPA(lfqi, terminalF = harvest_rate[i], plus_group = plus_group))
             lfqi$FM <- tty$FM_calc
+            lfqi$Lr <- min(lfqi$midLengths)
+            ##            lfqi$Lc <- L50
             resi <- predict_mod(param = lfqi,
                                type = "ThompBell",
                                FM_change = seq(0,3,0.05),
@@ -850,7 +864,7 @@ virtualPop2 <- function(tincr = 1/12,
         }else{
             tmp = data.frame(F01 = NA, Fmax = NA, F05 = NA)
         }
-        
+
 
         if(FALSE){
         ## one way with selectivity parameters
@@ -877,15 +891,13 @@ virtualPop2 <- function(tincr = 1/12,
     }
     yprRes <- do.call(rbind, yprList)
 
-
-    
     ## LBIs
     ##--------------------------------------------------------------------------------------------------
     ## mean length of largest 5% (/Linf >.8)
     numb <- lapply(c_list, function(x) x[rev(order(midLengths))])    # from largest starting
     midLengthsRev <- midLengths[rev(order(midLengths))]
-    Lmax5 <- vector('numeric',length(dates))
-    for(i in 1:length(dates)){
+    Lmax5 <- vector('numeric',length(datesUni))
+    for(i in 1:length(datesUni)){
       numbcum <- cumsum(numb[[i]]) 
       numbcumperc <- round(numbcum / sum(numb[[i]]),5)
       numbnum5 <- rep(0, length(numbcumperc))
@@ -899,8 +911,8 @@ virtualPop2 <- function(tincr = 1/12,
     res$refLev$L95 <- L95
     ## Pmega (Lopt + 10%) (>.3)
     Lopt <- (2 / 3) * Linf.mu
-    Pmega <- vector('numeric', length(dates))
-    for(i in 1:length(dates)){
+    Pmega <- vector('numeric', length(datesUni))
+    for(i in 1:length(datesUni)){
       Pmega[i] <- sum(c_list[[i]][which(midLengths >= (Lopt + 0.1 * Lopt))], na.rm = TRUE) / 
         sum(c_list[[i]], na.rm = TRUE)
     }
@@ -915,8 +927,8 @@ virtualPop2 <- function(tincr = 1/12,
     res$refLev$Lc <- Lc
     ## alternatively: 50% of mode
     modes <- unlist(lapply(c_list, function(x) which.max(x)))   ## deleted midLengths[which...
-    Lcalt <- vector('numeric',length(dates))
-    for(i in 1:length(dates)){
+    Lcalt <- vector('numeric',length(datesUni))
+    for(i in 1:length(datesUni)){
       temp <- as.numeric(cumSum_perc[[i]][modes[i]])
       Lcalt[i] <- midLengths[which.min(abs(cumSum_perc[[i]] - 0.5 * temp))]
     }
@@ -924,7 +936,7 @@ virtualPop2 <- function(tincr = 1/12,
     ## mean length of individuals > Lc (/Lopt ~1 ; /LF=M >= 1)
     c_listLC <- lapply(c_list, function(x) x[midLengths >= Lc])
     midLengthsLC <- midLengths[midLengths >= Lc]
-    Lmean <- vector('numeric', length(dates))
+    Lmean <- vector('numeric', length(datesUni))
     for(i in 1:length(c_listLC)){
       Lmean[i] <- sum(midLengthsLC * c_listLC[[i]], na.rm = TRUE) / sum(c_listLC[[i]], na.rm = TRUE)
     }
