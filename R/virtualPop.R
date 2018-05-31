@@ -260,7 +260,7 @@ virtualPop <- function(
       #   up3 <- seq(0.263, 0.554, length.out = (length(fished_t)/8))
       #   down3 <- seq(0.554, 0.181, length.out = length(fished_t) - burnin/tincr - length(c(up, down, up2, down2, up3)))
       #   harvest_rate <- c(rep(0, burnin/tincr), up, down, up2, down2, up3, down3)
-      # }
+      }
       return(harvest_rate)
     }
     
