@@ -222,12 +222,16 @@ virtualPop <- function(
     if (is.null(modpath) == FALSE) {
       iterpath <- file.path(modpath, iter)
       dir.create(iterpath, showWarnings = FALSE)
-      seed <- seed + iter
+      ## seed values
+      if(is.null(seed) || is.null(seed)){
+        seed <- floor(runif(1,1,1000))
+      }
+      set.seed(seed)
     }
     
     ## Fishing mortality - effort - catchability
     ## Different fishing scenarios
-    fishing.scenario <- function(Fishscen, seed){
+    fishing.scenario <- function(Fishscen){
       if(Fishscen == "Constant"){
         harvest_rate <- c(rep(0, burnin/tincr), rep(F_scen, length(fished_t) - burnin/tincr))
       }
@@ -242,22 +246,22 @@ virtualPop <- function(
         harvest_rate <- c(rep(0, burnin/tincr), up, down)
       }
       
-      # if(Fishscen == "Multi_peak"){
-      #   up <- seq(0, F_high, length.out = (length(fished_t)/6))
-      #   down <- seq(F_high, F_low, length.out = (length(fished_t)/6))
-      #   up2 <- seq(F_low, F_high, length.out = (length(fished_t)/6))
-      #   down2 <- seq(F_high, F_low, length.out = length(fished_t)- burnin/tincr - length(up) - length(down) - length(up2))
-      #   harvest_rate <- c(rep(0, burnin/tincr), up, down, up2, down2)
-      if(Fishscen == "Multi-peak"){
-        up <- seq(0, 0.8, length.out = (length(fished_t)/8))
-        down <- seq(0.8, 0.218, length.out = (length(fished_t)/8))
-        up2 <- seq(0.218, 0.627, length.out = (length(fished_t)/8))
-        down2 <- seq(0.627, 0.263, length.out = (length(fished_t)/8))
-        up3 <- seq(0.263, 0.554, length.out = (length(fished_t)/8))
-        down3 <- seq(0.554, 0.181, length.out = length(fished_t) - burnin/tincr - length(c(up, down, up2, down2, up3)))
-        harvest_rate <- c(rep(0, burnin/tincr), up, down, up2, down2, up3, down3)
-      }
-      return(harvest_rate/2)
+      if(Fishscen == "Multi_peak"){
+        up <- seq(0, F_high, length.out = (length(fished_t)/6))
+        down <- seq(F_high, F_low, length.out = (length(fished_t)/6))
+        up2 <- seq(F_low, F_high, length.out = (length(fished_t)/6))
+        down2 <- seq(F_high, F_low, length.out = length(fished_t)- burnin/tincr - length(up) - length(down) - length(up2))
+        harvest_rate <- c(rep(0, burnin/tincr), up, down, up2, down2)
+      # if(Fishscen == "Multi-peak"){
+      #   up <- seq(0, 0.8, length.out = (length(fished_t)/8))
+      #   down <- seq(0.8, 0.218, length.out = (length(fished_t)/8))
+      #   up2 <- seq(0.218, 0.627, length.out = (length(fished_t)/8))
+      #   down2 <- seq(0.627, 0.263, length.out = (length(fished_t)/8))
+      #   up3 <- seq(0.263, 0.554, length.out = (length(fished_t)/8))
+      #   down3 <- seq(0.554, 0.181, length.out = length(fished_t) - burnin/tincr - length(c(up, down, up2, down2, up3)))
+      #   harvest_rate <- c(rep(0, burnin/tincr), up, down, up2, down2, up3, down3)
+      # }
+      return(harvest_rate)
     }
     
     ## if E == single value, assuming one fleet and same effort for all fished years
@@ -299,7 +303,7 @@ virtualPop <- function(
       }
     }
     
-    harvest_rate <- fishing.scenario(Fishscen, seed) 
+    harvest_rate <- fishing.scenario(Fishscen) 
     
     selfunc <- function(Lt, fleetNo){
       if(is.na(fleetNo)){
@@ -395,24 +399,15 @@ virtualPop <- function(
       return(inds)
     }
     
-    express.inds <- function(inds, seed){
-      set.seed(seed)
+    express.inds <- function(inds){
       inds$Linf <- Linf.mu * rlnorm(nrow(inds), 0, Linf.cv)
       inds$Winf <- LWa*inds$Linf^LWb
       # inds$K <- 10^(phiprime.mu - 2*log10(inds$Linf)) * rlnorm(nrow(inds), 0, K.cv)
-      seed1 <- seed + 1
-      set.seed(seed1)
       inds$K <- K.mu * rlnorm(nrow(inds), 0, K.cv)
       inds$W <- LWa*inds$L^LWb
       inds$phiprime <- log10(inds$K) + 2*log10(inds$Linf)
-      seed2 <- seed + 2
-      set.seed(seed2)
       inds$sex <- rbinom(nrow(inds), size = 1, prob = .5)  # 0 = F, 1 = M
-      seed3 <- seed + 3
-      set.seed(seed3)
       inds$Lmat[which(inds$sex == 0)] <- rnorm(length(which(inds$sex == 0)), mean=Lmat.f, sd=wmat.f/diff(qnorm(c(0.25, 0.75))))
-      seed4 <- seed + 4
-      set.seed(seed4)
       inds$Lmat[which(inds$sex == 1)] <- rnorm(length(which(inds$sex == 1)), mean=Lmat.m, sd=wmat.m/diff(qnorm(c(0.25, 0.75))))
       inds$L <- dt_growth_soVB(Linf = inds$Linf, K = inds$K, ts = ts, C = C, L1 = 0, t1 = t0, t2 = 0)
       return(inds)
@@ -440,7 +435,7 @@ virtualPop <- function(
     # for constant recruitment
     RecDev <- rlnorm(1, 0, sdlog= SigmaR)
     
-    reproduce.inds <- function(inds, seed, save = FALSE){
+    reproduce.inds <- function(inds, save = FALSE){
       ## reproduction can only occur of population contains >1 mature individual
       if(rec_dyn == "BH"){  
         if(repro > 0 & sum(inds$mat) > 0){
@@ -448,8 +443,6 @@ virtualPop <- function(
           SSB <- sum(inds$W*inds$mat)
           n.recruits <- ceiling(srrBH(rmaxBH, betaBH, SSB) * repro)
           ## add noise to recruitment process
-          seed5 <- seed + 5
-          set.seed(seed5)
           RecDev <- rlnorm(1, 0, sdlog= SigmaR)
           n.recruits <- n.recruits * RecDev
           ## save SSB + n.recruits for stock recruitment plot
@@ -460,7 +453,7 @@ virtualPop <- function(
           )
           inds$R_t <- n.recruits
           # express genes in recruits
-          offspring <- express.inds(offspring, seed = seed+10)
+          offspring <- express.inds(offspring)
           ##combine all individuals
           inds <- rbind(inds, offspring)
         }
@@ -473,8 +466,6 @@ virtualPop <- function(
           n.recruits <- ceiling(srrBH(rmaxBH, betaBH, SSB) * repro)
           ## 
           ## add noise to recruitment process
-          seed5 <- seed + 5
-          set.seed(seed5)
           n.recruits <- n.recruits * RecDev
           ## save SSB + n.recruits for stock recruitment plot
           if(save) stockRec <<- rbind(stockRec, data.frame(SSB = SSB, recruits = n.recruits))
@@ -482,10 +473,9 @@ virtualPop <- function(
           offspring <- make.inds(
             id = seq(lastID+1, length.out=n.recruits)
           )
-          set.seed(seed5)
           inds$R_t <- n.recruits
           ## express genes in recruits
-          offspring <- express.inds(offspring, seed = seed+10)
+          offspring <- express.inds(offspring)
           ##combine all individuals
           inds <- rbind(inds, offspring)
         }
@@ -496,8 +486,6 @@ virtualPop <- function(
           SSB <- sum(inds$W * inds$mat)
           n.recruits <- ceiling(srrBH(rmaxBH, betaBH, SSB) * repro)
           ## add noise to recruitment process
-          seed5 <- seed + 5
-          set.seed(seed5)
           RecDev <- rnorm(1, -(SigmaR ^ 2) / 2, SigmaR)
           RecDev_AR <- rho + sqrt(1 - rho ^ 2) * RecDev
           R_t <- exp(RecDev_AR)
@@ -510,7 +498,7 @@ virtualPop <- function(
           )
           inds$R_t <- n.recruits
           ## express genes in recruits
-          offspring <- express.inds(offspring, seed = seed+10)
+          offspring <- express.inds(offspring)
           ##combine all individuals
           inds <- rbind(inds, offspring)
         }
@@ -518,7 +506,7 @@ virtualPop <- function(
       return(inds)
     }
     
-    death.inds <- function(inds, seed, f0 = FALSE){
+    death.inds <- function(inds, f0 = FALSE){
       ## multiple fleets
       if(class(harvest_rate)=="matrix"){
         if(dim(harvest_rate)[2]>=2){
@@ -553,16 +541,12 @@ virtualPop <- function(
       inds$Z <- M + inds$F
       if(f0) inds$Z <- M
       pDeath <- 1 - exp(-inds$Z*tincr)
-      seed6 <- seed + 6
-      set.seed(seed6)
       dead <- which(runif(nrow(inds)) < pDeath)
       # determine if natural or fished
       if(length(dead) > 0){
         inds$alive[dead] <- 0
         tmp <- cbind(inds$F[dead], inds$Z[dead])
         # Fd=1 for fished individuals; Fd=0, for those that died naturally
-        seed7 <- seed + 7
-        set.seed(seed7)
         Fd <- apply(tmp, 1, FUN=function(x){sample(c(0,1), size=1, prob=c(M/x[2], x[1]/x[2]) )})
         inds$Fd[dead] <- Fd
         rm(tmp)
@@ -637,14 +621,14 @@ virtualPop <- function(
     if(is.null(seed) || is.null(seed)){
       seed <- floor(runif(1,1,1000))
     }
-    seed2 <- seed + floor(runif(1,1,100))
+    set.seed(seed)
     
     # Initial population
     lastID <- 0
     inds <- make.inds(
       id=seq(N0)
     )
-    inds <- express.inds(inds = inds, seed = seed)
+    inds <- express.inds(inds = inds)
     
     ## results object
     res <- list()
@@ -664,7 +648,7 @@ virtualPop <- function(
     indsf0 <- make.inds(
       id=seq(N0)
     )
-    indsf0 <- express.inds(inds = indsf0, seed = seed)
+    indsf0 <- express.inds(inds = indsf0)
     ## results object 
     resf0 <- list()
     resf0$pop <- list(
@@ -709,8 +693,8 @@ virtualPop <- function(
       # population processes
       inds <- grow.inds(inds)
       inds <- mature.inds(inds)
-      inds <- reproduce.inds(inds = inds, seed = seed+11+j)
-      inds <- death.inds(inds, seed = seed2+j)
+      inds <- reproduce.inds(inds = inds)
+      inds <- death.inds(inds)
       
       
       ## sample lfq data
@@ -752,8 +736,8 @@ virtualPop <- function(
       # population processes
       indsf0 <- grow.inds(indsf0)
       indsf0 <- mature.inds(indsf0)
-      indsf0 <- reproduce.inds(inds = indsf0, seed = seed+11+j, save = TRUE)
-      indsf0 <- death.inds(indsf0, seed = seed2+j, f0 = TRUE)
+      indsf0 <- reproduce.inds(inds = indsf0, save = TRUE)
+      indsf0 <- death.inds(indsf0, f0 = TRUE)
       indsf0 <- remove.inds(indsf0)
       
       # update results
