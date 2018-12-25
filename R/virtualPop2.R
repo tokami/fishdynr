@@ -219,12 +219,12 @@ virtualPop2 <- function(tincr = 1/12,
     }
 
   ## If no harvest_rate provided assuming that effort * catchability = fishing mortality
-  if(!is.na(harvest_rate) & !is.nan(harvest_rate)){
+  if(!is.na(harvest_rate[1]) & !is.nan(harvest_rate[1])){
     if(length(as.numeric(harvest_rate))==1){
       harvest_rate <- rep(harvest_rate, length(fished_t))
     }else{
       harvest_rate <- matrix(rep(harvest_rate, each = length(fished_t)), 
-                             ncol = length(harvest_rate), nrow = length(fished=fished_t))
+                             ncol = length(harvest_rate), nrow = length(fished_t))
     }
     }else{
       harvest_rate <- Emat * qmat
@@ -366,7 +366,7 @@ virtualPop2 <- function(tincr = 1/12,
             ## add noise to recruitment process
             n.recruits <- exp(rnorm(1, log(n.recruits), srr.cv)) ## old: n.recruits * rlnorm(1, 0, sdlog = srr.cv)
             ## save SSB + n.recruits for stock recruitment plot
-            if(save) stockRec <<- rbind(stockRec, data.frame(SSB = SSB, recruits = n.recruits))
+            if(save) stockRec <<- rbind(stockRec, data.frame(SSB = SSB, recruits = n.recruits, time = tj))
             ## make recruits
             offspring <- make.inds(
                 id = seq(lastID+1, length.out=n.recruits)
@@ -508,8 +508,8 @@ virtualPop2 <- function(tincr = 1/12,
             SSB = NaN*timeseq
     )
 
-    stockRec <- as.data.frame(matrix(ncol=2,nrow=0))
-    colnames(stockRec) <- c("SSB", "recruits")
+    stockRec <- as.data.frame(matrix(ncol=3,nrow=0))
+    colnames(stockRec) <- c("SSB", "recruits","time")
 
     ## For simulation of unfished population
     ## Initial population
@@ -567,7 +567,7 @@ virtualPop2 <- function(tincr = 1/12,
         # population processes
         inds <- grow.inds(inds)
         inds <- mature.inds(inds)
-        inds <- reproduce.inds(inds = inds)
+        inds <- reproduce.inds(inds = inds, save = TRUE)
         inds <- death.inds(inds)
 
 
@@ -619,7 +619,7 @@ virtualPop2 <- function(tincr = 1/12,
             # population processes
             indsf0 <- grow.inds(indsf0)
             indsf0 <- mature.inds(indsf0)
-            indsf0 <- reproduce.inds(inds = indsf0,  save = TRUE)
+            indsf0 <- reproduce.inds(inds = indsf0,  save = FALSE)
             indsf0 <- death.inds(indsf0, f0 = TRUE)
             indsf0 <- remove.inds(indsf0)
 
@@ -757,7 +757,8 @@ virtualPop2 <- function(tincr = 1/12,
     ##--------------------------------------------------------------------------------------------------    
     res$refLev$years <- fished_years
     res$refLev$SPR <- temp1$x[temp1$years %in% as.numeric(fished_years)] / 
-      temp2$x[temp1$years %in% as.numeric(fished_years)] 
+        temp2$x[temp1$years %in% as.numeric(fished_years)]
+
     ## SPM refs
     res$refLev$Bdmsy <- Bdmsy
     res$refLev$msyd <- msyd
@@ -807,53 +808,42 @@ virtualPop2 <- function(tincr = 1/12,
                     catch = as.matrix(c_list[[i]])),
                     class = "lfq")
 
-        lfqi <- lfqModify(lfqi, vectorise_catch = TRUE)  ## only to remove 0s catches of small fish (for Lr)
+        lfqi$par <- list()
+        lfqi$par$Linf <- Linf.mu
+        lfqi$par$K <- K.mu
+        lfqi$par$t0 <- 0
+        lfqi$par$C <- C
+        lfqi$par$ts <- ts        
+
+        lfqi <- lfqModify(lfqi, vectorise_catch = TRUE, plus_group = "Linf")
+
+        lfqi$par$t_anchor<- weighted.mean(date2yeardec(as.Date(
+            paste("2014",which(repro_wt != 0),"15",sep="-"))) %% 1,
+            w = repro_wt[which(repro_wt != 0)])  ## weighted mean of t_anchor
+            ## 2014 only as example year to get the decimial of spawning months            
+        lfqi$par$Lmat <- mean(Lmat.f, Lmat.m)
+        lfqi$par$wmat <- mean(wmat.f, wmat.m)        
         
         lfqi <- c(lfqi,
-                  Linf = Linf.mu,
-                  K = K.mu,
-                  t0 = 0,
-                  C = C,
-                  ts = ts,
-                  t_anchor = weighted.mean(date2yeardec(as.Date(
-                            paste("2015",which(repro_wt != 0),"15",sep="-"))) %% 1,
-                            ## 2015 only as example year to get the decimial of spawning months
-                            w = repro_wt[which(repro_wt != 0)]),  ## weighted mean of t_anchor
                   M = M,
-##                  FM = harvest_rate[i], 
+                  FM = harvest_rate[i], 
                   a = LWa,
-                  b = LWb)
+                  b = LWb,
+                  Lr <- min(lfqi$midLengths))
         class(lfqi) <- "lfq"
 
-        ## one way with F vector from VPA
-        if(length(lfqi$midLengths) > 1){
-            lfqi <- lfqModify(lfqi, bin_size = binSizeVPA)
-            
-            interval <- lfqi$midLengths[2] - lfqi$midLengths[1]
-            upperLength <-  lfqi$midLengths + (interval / 2)
+        slist <- list(selecType="trawl_ogive", L50 = L50, L75 = L75)
 
-            if(Linf.mu < max(upperLength)){
-                lfqi <- lfqModify(lfqi,
-                                  plus_group =
-                                      lfqi$midLengths[which.min(abs(upperLength -
-                                                                       floor(Linf.mu)))])
-                plus_group <- TRUE
-            }else{
-                plus_group <- FALSE
-            }
-            
-##            if(any(lfqi$catch == 0)){
-##                lfqi <- lfqModify(lfqi,
-##                                  plus_group = lfqi$midLengths[min(which(lfqi$catch == 0))])
-##            }
-            tty <- suppressWarnings(VPA(lfqi, terminalF = harvest_rate[i], plus_group = plus_group))
-            lfqi$FM <- tty$FM_calc
-            lfqi$Lr <- min(lfqi$midLengths)
-            ##            lfqi$Lc <- L50
-            resi <- predict_mod(param = lfqi,
-                               type = "ThompBell",
-                               FM_change = seq(0,3,0.05),
-                               plot = FALSE, hide.progressbar = TRUE)
+
+        resi <- predict_mod(param = lfqi,
+                              type = "ThompBell",
+                              s_list = slist,
+                              curr.E = harvest_rate[i]/(harvest_rate[i]+M),
+                              curr.Lc = L50,
+                              plot = FALSE, hide.progressbar = TRUE,  
+                              FM_change = seq(0,5,0.01))
+
+        if(class(resi) != "try-error"){
 
             indi <- names(resi$df_Es) %in% c("F01","Fmax","F05")
             tmp <- resi$df_Es[indi]
@@ -953,20 +943,20 @@ virtualPop2 <- function(tincr = 1/12,
 
     
     ##--------------------------------------------------------------------------------------------------
-    res$refLev$states <- data.frame("Lmax5/Linf" = round(Lmax5/Linf.mu,2),
-                                    "L95/Linf" = round(L95/Linf.mu,2),
-                                    "Pmega" = round(Pmega,2),
-                                    "L25/Lmat" = round(L25/Lmat,2),
-                                    "Lc/Lmat" = round(Lcalt/Lmat,2),
-                                    "Lmean/Lopt" = round(Lmean/Lopt,2),
-                                    "Lmaxy/Lopt" = round(Lmaxy/Lopt,2),
-                                    "Lmean/LFeM" = round(Lmean/LFeM,2),
-                                    "SPR" = round(res$refLev$SPR,2),
-                                    "F/Fmsy" = round(harvest_rateYear/Fdmsy,2),
-                                    "B/Bmsy" = round(bioYear/Bdmsy,2),
-                                    "F/F01" = round(harvest_rateYear/yprRes[,1],2),
-                                    "F/Fmax" = round(harvest_rateYear/yprRes[,2],2),
-                                    "F/F05" = round(harvest_rateYear/yprRes[,3],2))
+    res$refLev$states <- data.frame("Lmax5/Linf" = round(Lmax5/Linf.mu,3),
+                                    "L95/Linf" = round(L95/Linf.mu,3),
+                                    "Pmega" = round(Pmega,3),
+                                    "L25/Lmat" = round(L25/Lmat,3),
+                                    "Lc/Lmat" = round(Lcalt/Lmat,3),
+                                    "Lmean/Lopt" = round(Lmean/Lopt,3),
+                                    "Lmaxy/Lopt" = round(Lmaxy/Lopt,3),
+                                    "Lmean/LFeM" = round(Lmean/LFeM,3),
+                                    "SPR" = round(res$refLev$SPR,3),
+                                    "F/Fmsy" = round(harvest_rateYear/Fdmsy,3),
+                                    "B/Bmsy" = round(bioYear/Bdmsy,3),
+                                    "F/F01" = round(harvest_rateYear/yprRes[,1],3),
+                                    "F/Fmax" = round(harvest_rateYear/yprRes[,2],3),
+                                    "F/F05" = round(harvest_rateYear/yprRes[,3],3))
     
     res$refLev$statesRefPoint <- data.frame("Lmax5/Linf" = ">0.8",
                                             "L95/Linf" = ">0.8",
@@ -1010,11 +1000,11 @@ virtualPop2 <- function(tincr = 1/12,
     )
 
         ## fisheries dependent information
-        ## if fisheries are simulated
-        if(any(!is.na(fished_t) & !is.nan(fished_t))){
+    ## if fisheries are simulated
+    if(any(!is.na(fished_t) & !is.nan(fished_t))){
             res$fisheries <- list(
                 fished_t = yeardec2date(date2yeardec(timemin.date) +
-                                         (timeseq[timeseq %in% fished_t] - timemin)),
+                                        (timeseq[round(timeseq,3) %in% round(fished_t,3)] - timemin)),
                 E = Emat,
                 q = qmat,
                 F = harvest_rate,
@@ -1089,6 +1079,8 @@ virtualPop2 <- function(tincr = 1/12,
       on.exit(par(mfrow=c(1,1), mar=c(5,4,4,2)))
     }
 
+    res$f0 <- resf0
+    res$stockRec <- stockRec
 
     return(res)
 } # end of function
