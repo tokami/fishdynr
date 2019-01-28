@@ -169,7 +169,7 @@ virtualPop2 <- function(tincr = 1/12,
                        Etf = 500,
                        qtf = 0.001,
                        harvest_rate = NaN,
-                       gear_types = "trawl",   # alternative: "gillnet"
+                       gear_types = "trawl",   # alternative: "gillnet", or "dome"
                        L50 = 0.25*Linf.mu,
                        wqs = L50*0.2,
                        sel_list = list(mesh_size=100, mesh_size1=60,select_dist="lognormal",select_p1=3, select_p2=0.5),  # parameters adapted from the tilapia data set (increased spread)
@@ -245,13 +245,20 @@ virtualPop2 <- function(tincr = 1/12,
                        L50X <- L50[fleetNo]
                        wqsX <- wqs[fleetNo]
                    }
-                   pSel <- logisticSelect(Lt=Lt, L50=L50X, wqs=wqsX)},
+                   pSel <- logisticSelect(Lt=Lt, L50=L50X, wqs=wqsX)
+               },
                gillnet={
                    if(!is.na(fleetNo)){
                        sel_listX <- sel_list[[fleet_No]]
                    }
                    pSel <- do.call(fishdynr::gillnet, c(list(Lt=Lt),sel_listX))
                },
+               dome={
+                   if(!is.na(fleetNo)){
+                       sel_listX <- sel_list[[fleet_No]]
+                   }
+                   pSel <- do.call(fishdynr::domeSelect, c(list(Lt=Lt),sel_listX))
+               },               
                stop(paste("\n",gear_typesX,"not recognized, possible options are: \n","trawl \n","gillnet \n")))
         return(pSel)
     }
