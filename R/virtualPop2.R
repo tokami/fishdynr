@@ -807,6 +807,45 @@ virtualPop2 <- function(tincr = 1/12,
 
     ## YPR
     ##--------------------------------------------------------------------------------------------------
+    midLengths = seq(0.5, Linf.mu, 0.5)
+    pSel <- selfunc(midLengths,1)
+    Fvec <- seq(0,5,0.01)
+    yprs <- rep(NA,length(Fvec))
+    bprs <- rep(NA,length(Fvec))    
+    for(i in 1:length(Fvec)){
+        tmp <- list(midLengths = midLengths, M = M,
+                    FM = as.numeric(Fvec[i] * pSel),
+                    Linf = Linf.mu, K = K.mu, a = LWa, b = LWb)
+        yprs[i] <- stock_sim(param = tmp)$totals$totY
+        bprs[i] <- stock_sim(param = tmp)$totals$meanB
+    }
+
+    nmax <- which.max(yprs)
+    slopeOrg <- (yprs[2] - yprs[1])/(Fvec[2] - Fvec[1])
+    slope01 <- round(0.1 * slopeOrg, 2)
+    slopes <- rep(NA, length(Fvec))
+    slopes[1] <- slopeOrg
+    for (i in 3:length(Fvec)) {
+        slopes[i - 1] <- round((yprs[i] - yprs[i - 1])/(Fvec[i] - Fvec[i - 1]), 2)
+    }
+    dif <- abs(slopes - slope01)
+    dif[is.na(dif)] <- 1e+11
+    difpot <- dif[1:nmax]
+    n01 <- which.min(difpot)
+    Bper <- rep(NA, length(bprs))
+    Bper[1] <- 100
+    for (ix in 2:length(Bper)) {
+        Bper[ix] <- bprs[ix]/bprs[1] * 100
+    }
+    n05 <- which.min(abs(Bper - 50))
+
+    res$refLev$Fmax <- Fvec[nmax]
+    res$refLev$F01 <- Fvec[n01]    
+    res$refLev$F05 <- Fvec[n05]
+
+
+    ## old approach
+    if(FALSE){
     yprList <- vector("list", length(c_list))
     for(i in 1:length(c_list)){  ## loop through years
 
@@ -839,7 +878,7 @@ virtualPop2 <- function(tincr = 1/12,
                   Lr <- min(lfqi$midLengths))
         class(lfqi) <- "lfq"
 
-        slist <- list(selecType="trawl_ogive", L50 = L50, L75 = L75)
+        slist <- list(selecType="trawl_ogive", L50 = L50, L75 = L50 + wqs/2)
 
 
         resi <- predict_mod(param = lfqi,
@@ -887,6 +926,7 @@ virtualPop2 <- function(tincr = 1/12,
         yprList[[i]] <- tmp
     }
     yprRes <- do.call(rbind, yprList)
+    }
 
     ## LBIs
     ##--------------------------------------------------------------------------------------------------
@@ -960,10 +1000,10 @@ virtualPop2 <- function(tincr = 1/12,
                                     "Lmean/LFeM" = round(Lmean/LFeM,3),
                                     "SPR" = round(res$refLev$SPR,3),
                                     "F/Fmsy" = round(harvest_rateYear/Fdmsy,3),
-                                    "B/Bmsy" = round(bioYear/Bdmsy,3),
-                                    "F/F01" = round(harvest_rateYear/yprRes[,1],3),
-                                    "F/Fmax" = round(harvest_rateYear/yprRes[,2],3),
-                                    "F/F05" = round(harvest_rateYear/yprRes[,3],3))
+                                    "B/Bmsy" = round(bioYear/Bdmsy,3))
+                                    ## "F/F01" = round(harvest_rateYear/yprRes[,1],3),
+                                    ## "F/Fmax" = round(harvest_rateYear/yprRes[,2],3),
+                                    ## "F/F05" = round(harvest_rateYear/yprRes[,3],3))
     
     res$refLev$statesRefPoint <- data.frame("Lmax5/Linf" = ">0.8",
                                             "L95/Linf" = ">0.8",
