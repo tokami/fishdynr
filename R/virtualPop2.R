@@ -807,13 +807,13 @@ virtualPop2 <- function(tincr = 1/12,
 
     ## YPR
     ##--------------------------------------------------------------------------------------------------
-    midLengths = seq(0.5, Linf.mu, 0.5)
-    pSel <- selfunc(midLengths,1)
+    midLengthsYPR = seq(0.5, Linf.mu, 0.5)
+    pSel <- selfunc(midLengthsYPR,1)
     Fvec <- seq(0,5,0.01)
     yprs <- rep(NA,length(Fvec))
     bprs <- rep(NA,length(Fvec))    
     for(i in 1:length(Fvec)){
-        tmp <- list(midLengths = midLengths, M = M,
+        tmp <- list(midLengths = midLengthsYPR, M = M,
                     FM = as.numeric(Fvec[i] * pSel),
                     Linf = Linf.mu, K = K.mu, a = LWa, b = LWb)
         yprs[i] <- stock_sim(param = tmp)$totals$totY
