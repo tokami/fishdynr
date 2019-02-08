@@ -249,13 +249,13 @@ virtualPop2 <- function(tincr = 1/12,
                },
                gillnet={
                    if(!is.na(fleetNo)){
-                       sel_listX <- sel_list[[fleet_No]]
+                       sel_listX <- sel_list[[fleetNo]]
                    }
                    pSel <- do.call(fishdynr::gillnet, c(list(Lt=Lt),sel_listX))
                },
                dome={
                    if(!is.na(fleetNo)){
-                       sel_listX <- sel_list[[fleet_No]]
+                       sel_listX <- sel_list[[fleetNo]]
                    }
                    pSel <- do.call(fishdynr::domeSelect, c(list(Lt=Lt),sel_listX))
                },               
