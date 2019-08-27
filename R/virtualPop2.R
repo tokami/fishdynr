@@ -222,6 +222,8 @@ virtualPop2 <- function(tincr = 1/12,
   if(!is.na(harvest_rate[1]) & !is.nan(harvest_rate[1])){
     if(length(as.numeric(harvest_rate))==1){
       harvest_rate <- rep(harvest_rate, length(fished_t))
+    }else if(length(harvest_rate) == length(fished_t)){
+        harvest_rate <- harvest_rate
     }else{
       harvest_rate <- matrix(rep(harvest_rate, each = length(fished_t)), 
                              ncol = length(harvest_rate), nrow = length(fished_t))
